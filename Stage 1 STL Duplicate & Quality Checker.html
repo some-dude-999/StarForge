@@ -1,0 +1,2604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Inspector - Quality Check & Duplicate Finder</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        .header {
+            text-align: center;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            margin-bottom: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 5px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        /* Main Views */
+        .main-view {
+            display: none;
+        }
+        .main-view.active {
+            display: block;
+        }
+        /* Hand Inspection View - Modal Overlay */
+        #inspectionView {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            z-index: 10000;
+            padding: 20px;
+        }
+        .close-inspection {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: #f44336;
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 2rem;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            z-index: 10001;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+        .close-inspection:hover {
+            background: #d32f2f;
+            transform: scale(1.1) rotate(90deg);
+        }
+        /* Hand Inspection View */
+        .inspection-layout {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 20px;
+            position: relative;
+        }
+        .viewer-container {
+            width: 100%;
+            max-width: 1600px;
+            position: relative;
+        }
+        .viewer-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .viewer-info {
+            text-align: center;
+            font-size: 0.95rem;
+            font-weight: bold;
+            padding: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        /* FLEXBOX LAYOUT - Everything at same level */
+        .canvas-row {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+        
+        .canvas-area {
+            position: relative;
+            width: 100%;
+            max-width: 70vh;
+            max-height: 70vh;
+            aspect-ratio: 1 / 1;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+        }
+        #viewerCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border-radius: 10px;
+            transform: rotate(90deg);
+        }
+        /* Navigation Buttons - Left and Right */
+        .nav-btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(76, 175, 80, 0.9); /* Green background */
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            backdrop-filter: blur(10px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .nav-btn:hover:not(:disabled) {
+            background: rgba(76, 175, 80, 1); /* Brighter green on hover */
+            transform: scale(1.1);
+            border-color: rgba(255, 255, 255, 0.6);
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.6);
+        }
+        .nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        /* Bottom Actions */
+        .bottom-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            margin-top: 15px;
+        }
+        /* Control Panels - Left and Right on Canvas */
+        /* Control Panels - Now Flex Items */
+        .control-panel-left,
+        .control-panel-right {
+            width: 200px;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            padding: 12px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .control-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .control-section h3 {
+            font-size: 0.85rem;
+            margin-bottom: 8px;
+            text-align: center;
+            color: #fff;
+        }
+        .mouse-gestures {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 6px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            line-height: 1.4;
+        }
+        .mouse-gestures div {
+            margin-bottom: 3px;
+        }
+        .mouse-gestures strong {
+            color: #4CAF50;
+        }
+        .slider-container {
+            margin-bottom: 10px;
+        }
+        .slider-container:last-child {
+            margin-bottom: 0;
+        }
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .slider-label .axis-label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .slider-label .axis-label span {
+            font-size: 0.7rem;
+        }
+        .axis-color-box {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        .axis-x { background: #ff0000; }
+        .axis-y { background: #00ff00; }
+        .axis-z { background: #0000ff; }
+        .rotation-slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.2);
+            outline: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .rotation-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+        }
+        .rotation-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #fff;
+        }
+        .rotation-slider.x-axis::-webkit-slider-thumb {
+            background: #ff0000;
+        }
+        .rotation-slider.x-axis::-moz-range-thumb {
+            background: #ff0000;
+        }
+        .rotation-slider.y-axis::-webkit-slider-thumb {
+            background: #00ff00;
+        }
+        .rotation-slider.y-axis::-moz-range-thumb {
+            background: #00ff00;
+        }
+        .rotation-slider.z-axis::-webkit-slider-thumb {
+            background: #0000ff;
+        }
+        .rotation-slider.z-axis::-moz-range-thumb {
+            background: #0000ff;
+        }
+        .lock-btn {
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .lock-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+        .lock-btn.locked {
+            background: rgba(76, 175, 80, 0.3);
+            border-color: #4CAF50;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+        }
+        .rotation-slider:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+        .zoom-controls {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+        }
+        .zoom-btn {
+            flex: 1;
+            padding: 8px;
+            font-size: 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            transform: scale(1.05);
+        }
+        .control-section .btn {
+            width: 100%;
+            margin-bottom: 6px;
+            padding: 10px;
+            font-size: 0.85rem;
+        }
+        .control-section .btn:last-child {
+            margin-bottom: 0;
+        }
+        .model-list-panel {
+            display: none;
+        }
+        .model-list-item {
+            display: none;
+        }
+        .btn {
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+        /* Duplicate View Styles - simplified versions of previous styles */
+        .upload-section {
+            background: rgba(255, 255, 255, 0.15);
+            border: 3px dashed rgba(255, 255, 255, 0.5);
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        .upload-section:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.01);
+        }
+        .upload-section.dragover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: #ffffff;
+        }
+        .controls {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            backdrop-filter: blur(10px);
+        }
+        .stats {
+            display: flex;
+            gap: 25px;
+            flex-wrap: wrap;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-item .label {
+            font-size: 0.85rem;
+            opacity: 0.8;
+            margin-bottom: 3px;
+        }
+        .stat-item .value {
+            font-size: 1.6rem;
+            font-weight: bold;
+        }
+        .table-container {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+            margin-bottom: 20px;
+        }
+        .section-header {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 12px 15px;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead {
+            background: rgba(255, 255, 255, 0.15);
+        }
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.85rem;
+        }
+        tbody tr {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            transition: background 0.2s;
+        }
+        tbody tr:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        tbody tr.duplicate-row {
+            background: rgba(255, 200, 100, 0.15);
+        }
+        tbody tr.bad-file-row {
+            background: rgba(255, 50, 50, 0.2);
+        }
+        tbody tr.safe-duplicate-row {
+            background: rgba(100, 255, 100, 0.1); /* Greenish tint for the "safe" copy */
+        }
+        td {
+            padding: 12px;
+        }
+        .thumbnail {
+            width: 120px;
+            height: 120px;
+            border-radius: 6px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            object-fit: contain;
+            background: rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        .thumbnail[style*="cursor: pointer"]:hover {
+            transform: scale(1.05);
+            border-color: #4CAF50;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.4);
+        }
+        .filename {
+            font-size: 0.95rem;
+            word-break: break-word;
+        }
+        .filesize {
+            font-size: 1rem;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+        }
+        .duplicate-badge {
+            display: inline-block;
+            background: rgba(255, 150, 0, 0.8);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        .delete-box-container {
+            margin-top: 8px;
+        }
+        .delete-label {
+            color: #ff4444;
+            font-weight: bold;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+        .delete-copy-box {
+            background: #000000;
+            border: 2px solid #ff0000;
+            color: #ff4444;
+            font-weight: bold;
+            padding: 6px 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .delete-copy-box:hover {
+            background: #1a0000;
+            border-color: #ff3333;
+            color: #ff6666;
+        }
+        .marked-duplicate {
+            opacity: 0.6;
+            background: rgba(255, 0, 0, 0.1) !important;
+        }
+        .progress-container {
+            display: none;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 25px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+        }
+        .progress-text {
+            text-align: center;
+            font-size: 0.95rem;
+        }
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            font-size: 1.1rem;
+            opacity: 0.7;
+        }
+        #offscreenCanvas {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔍 3D Model Inspector</h1>
+        <p>Quality Check & Duplicate Finder</p>
+    </div>
+    <!-- Duplicate View -->
+    <div id="duplicateView" class="main-view active">
+        <div class="upload-section" id="uploadSection">
+            <h2>📁 Upload STL Files</h2>
+            <p>Drop files here or click to browse</p>
+        </div>
+        <div class="controls">
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="label">Total Files</div>
+                    <div class="value" id="totalFiles">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">Bad Files</div>
+                    <div class="value" id="badFilesCount" style="color: #ff4444;">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">Duplicates</div>
+                    <div class="value" id="duplicateCount">0</div>
+                </div>
+                <div class="stat-item">
+                    <div class="label">Marked</div>
+                    <div class="value" id="markedCount">0</div>
+                </div>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <input type="checkbox" id="autoMarkCheckbox" checked style="width: 18px; height: 18px; cursor: pointer;">
+                    <span style="font-weight: bold;">Auto-Mark</span>
+                </label>
+                <button class="btn btn-danger" id="exportDeletionCSVBtn" onclick="exportDeletionCSV()" disabled>📄 Export Deletion CSV</button>
+                <button class="btn btn-primary" id="recheckBtn" disabled>🔄 Recheck</button>
+                <button class="btn btn-danger" id="clearBtn" disabled>Clear</button>
+                <button class="btn btn-success" id="downloadAllBtn" disabled>📷 Download All</button>
+            </div>
+        </div>
+        <div class="progress-container" id="progressContainer">
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressFill">0%</div>
+            </div>
+            <div class="progress-text" id="progressText">Processing...</div>
+        </div>
+        <div id="badFilesSection" style="display: none;">
+            <div class="table-container">
+                <div class="section-header">❌ Bad Files (Marked for Deletion)</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 150px; text-align: center;">Preview</th>
+                            <th>File Name</th>
+                            <th style="width: 120px; text-align: right;">File Size</th>
+                            <th style="width: 200px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="badFilesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="markedDuplicatesSection" style="display: none;">
+            <div class="table-container">
+                <div class="section-header">🗑️ Marked Duplicates</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 120px; text-align: center;">Duplicate</th>
+                            <th>Duplicate Name</th>
+                            <th style="width: 120px; text-align: center;">Original</th>
+                            <th>Original Name</th>
+                            <th style="width: 100px; text-align: center;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="markedDuplicatesTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+        <div class="table-container">
+            <div class="section-header">📋 All Models</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 150px; text-align: center;">Preview</th>
+                        <th>File Name</th>
+                        <th style="width: 120px; text-align: right;">File Size</th>
+                        <th style="width: 200px; text-align: center;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr>
+                        <td colspan="4" class="no-data">No models loaded</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <!-- Hand Inspection View -->
+    <div id="inspectionView" class="main-view">
+        <button class="close-inspection" onclick="closeInspectionView()">✕</button>
+        
+        <div class="inspection-layout">
+            <div class="viewer-container">
+                <div class="viewer-title" id="viewerTitle">Select a model</div>
+                <div class="viewer-info" id="viewerInfo">Model 0 of 0</div>
+                
+                <!-- Pure Flexbox Layout: All elements are siblings -->
+                <div class="canvas-row">
+                    
+                    <!-- Left Control Panel -->
+                    <div class="control-panel-left">
+                        <div class="control-section">
+                            <h3>🖱️ Mouse</h3>
+                            <div class="mouse-gestures">
+                                <div><strong>Left Drag:</strong> Rotate</div>
+                                <div><strong>Scroll:</strong> Zoom to cursor</div>
+                                <div><strong>Right Drag:</strong> Pan</div>
+                            </div>
+                        </div>
+                        <div class="control-section">
+                            <h3>⌨️ Keyboard</h3>
+                            <div class="mouse-gestures">
+                                <div><strong>← / A:</strong> Prev</div>
+                                <div><strong>→ / D:</strong> Next</div>
+                                <div><strong>0:</strong> Reset Zoom</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Previous Button -->
+                    <button class="nav-btn" id="prevModelBtn" onclick="navigateModel(-1)" disabled>◀</button>
+                    
+                    <!-- Canvas Area -->
+                    <div class="canvas-area">
+                        <!-- Left column buttons - Top Left -->
+                        <div style="position: absolute; top: 15px; left: 15px; z-index: 100; display: flex; flex-direction: column; gap: 8px;">
+                            <button onclick="screenshotViewer()" style="padding: 8px 16px; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; background: #3a3a3a; color: #ffa500; transition: all 0.2s; white-space: nowrap;">📷 Screenshot</button>
+                            <button onclick="resetView()" style="padding: 8px 16px; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; background: #3a3a3a; color: #ffa500; transition: all 0.2s; white-space: nowrap;">🔄 Reset View</button>
+                        </div>
+                        
+                        <!-- Bad File button - Top Right -->
+                        <button onclick="markAsBadFile()" style="position: absolute; top: 15px; right: 15px; z-index: 100; padding: 8px 16px; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; background: #3a3a3a; color: #ff4444; transition: all 0.2s; white-space: nowrap;">❌ Bad File</button>
+                        
+                        <canvas id="viewerCanvas" width="1080" height="1080"></canvas>
+                    </div>
+                    
+                    <!-- Next Button -->
+                    <button class="nav-btn" id="nextModelBtn" onclick="navigateModel(1)" disabled>▶</button>
+                    
+                    <!-- Right Control Panel -->
+                    <div class="control-panel-right">
+                        <div class="control-section">
+                            <h3>🔄 Rotation</h3>
+                            
+                            <div class="slider-container">
+                                <div class="slider-label">
+                                    <div class="axis-label">
+                                        <div class="axis-color-box axis-x"></div>
+                                        <span>X</span>
+                                    </div>
+                                    <span id="xRotValue">0°</span>
+                                </div>
+                                <div style="display: flex; gap: 5px; align-items: center;">
+                                    <input type="range" class="rotation-slider x-axis" id="xRotSlider" min="-180" max="180" value="0" step="1" style="flex: 1;">
+                                    <button class="lock-btn" id="lockXBtn" onclick="toggleAxisLock('x')" title="Lock to X axis">🔓</button>
+                                </div>
+                            </div>
+                            <div class="slider-container">
+                                <div class="slider-label">
+                                    <div class="axis-label">
+                                        <div class="axis-color-box axis-y"></div>
+                                        <span>Y</span>
+                                    </div>
+                                    <span id="yRotValue">0°</span>
+                                </div>
+                                <div style="display: flex; gap: 5px; align-items: center;">
+                                    <input type="range" class="rotation-slider y-axis" id="yRotSlider" min="-180" max="180" value="0" step="1" style="flex: 1;">
+                                    <button class="lock-btn" id="lockYBtn" onclick="toggleAxisLock('y')" title="Lock to Y axis">🔓</button>
+                                </div>
+                            </div>
+                            <div class="slider-container">
+                                <div class="slider-label">
+                                    <div class="axis-label">
+                                        <div class="axis-color-box axis-z"></div>
+                                        <span>Z</span>
+                                    </div>
+                                    <span id="zRotValue">0°</span>
+                                </div>
+                                <div style="display: flex; gap: 5px; align-items: center;">
+                                    <input type="range" class="rotation-slider z-axis" id="zRotSlider" min="-180" max="180" value="0" step="1" style="flex: 1;">
+                                    <button class="lock-btn" id="lockZBtn" onclick="toggleAxisLock('z')" title="Lock to Z axis">🔓</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="control-section">
+                            <h3>🔄 Auto-Rotate</h3>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 6px;">
+                                <input type="checkbox" id="autoRotateCheckbox" checked style="width: 18px; height: 18px; cursor: pointer;">
+                                <span style="font-size: 0.85rem;">Z 110° on Import</span>
+                            </label>
+                        </div>
+                        <div class="control-section">
+                            <h3>🔍 Zoom</h3>
+                            <div class="zoom-controls">
+                                <button class="zoom-btn" onclick="zoomOut()">−</button>
+                                <button class="zoom-btn" onclick="resetView()">⊙</button>
+                                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                            </div>
+                        </div>
+                        <div class="control-section">
+                            <h3>🐛 Debug</h3>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px; background: rgba(255, 255, 255, 0.05); border-radius: 6px;">
+                                <input type="checkbox" id="debugCheckbox" onchange="toggleDebugMode(this.checked)" style="width: 18px; height: 18px; cursor: pointer;">
+                                <span style="font-size: 0.85rem;">Show Box & Origin</span>
+                            </label>
+                        </div>
+                    </div>
+                    
+                </div><!-- End canvas-row -->
+                
+            </div>
+        </div>
+    </div>
+    <canvas id="offscreenCanvas" width="512" height="512"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        let modelData = [];
+        let markedDuplicates = new Map();
+        let badFiles = new Set(); // Track files marked as bad
+        let autoMarkEnabled = true;
+        let currentViewerIndex = 0;
+        let viewerScene = null;
+        let viewerCamera = null;
+        let viewerRenderer = null;
+        let viewerMesh = null;
+        let boundingBoxHelper = null;
+        let rotationIndicators = null;
+        let baseModelRotation = new THREE.Quaternion();
+        let baseCageRotation = new THREE.Quaternion();
+        let viewerControls = {
+            isDragging: false,
+            isRightDragging: false,
+            previousMouse: { x: 0, y: 0 },
+            currentMouse: { x: 0, y: 0 }, // Track current mouse position for zoom
+            rotation: { x: 0, y: 0, z: 0 },
+            zoom: 1,
+            pan: { x: 0, y: 0 },
+            selectedAxis: null
+        };
+        
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // DEBUG MODE - Toggle visualization helpers
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // Set to true to show bounding box and rotation origin
+        // Set to false to hide debug visualizations
+        // 
+        // DEBUG VISUALIZATIONS:
+        // - Bright magenta sphere (0xff00ff) at origin (0,0,0) = rotation center
+        // - Cyan box (0x00ffff) = bounding box around the model
+        // 
+        // TO DISABLE: Change DEBUG_MODE = true to DEBUG_MODE = false
+        // TO RE-ENABLE: Change DEBUG_MODE = false to DEBUG_MODE = true
+        let DEBUG_MODE = false; // Changed to let so it can be toggled, default false
+        // ═══════════════════════════════════════════════════════════════════════════════
+        
+        let debugOriginMarker = null;
+        let debugBoundingBox = null;
+        
+        function createDebugVisualizations() {
+            if (!DEBUG_MODE || !viewerMesh) return;
+            
+            // Remove old debug visualizations
+            if (debugOriginMarker) {
+                viewerScene.remove(debugOriginMarker);
+                debugOriginMarker = null;
+            }
+            if (debugBoundingBox) {
+                viewerScene.remove(debugBoundingBox);
+                debugBoundingBox = null;
+            }
+            
+            // Create rotation origin marker (large bright sphere at 0,0,0)
+            // Made visible so it can be seen, even inside the model
+            const originGeometry = new THREE.SphereGeometry(4, 32, 32); // Radius 4 - visible but not too large
+            const originMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff00ff, // Bright magenta
+                transparent: true,
+                opacity: 0.9,
+                depthTest: false, // Render on top of everything - always visible!
+                depthWrite: false
+            });
+            debugOriginMarker = new THREE.Mesh(originGeometry, originMaterial);
+            debugOriginMarker.position.set(0, 0, 0);
+            debugOriginMarker.renderOrder = 999; // Render last (on top)
+            viewerScene.add(debugOriginMarker);
+            
+            // Create bounding box helper
+            const box = new THREE.Box3().setFromObject(viewerMesh);
+            const helper = new THREE.Box3Helper(box, 0x00ffff); // Cyan
+            helper.material.depthTest = false; // Also render on top for visibility
+            helper.renderOrder = 998;
+            debugBoundingBox = helper;
+            viewerScene.add(debugBoundingBox);
+            
+            // Ensure debug objects don't cast shadows
+            debugOriginMarker.castShadow = false;
+            debugOriginMarker.receiveShadow = false;
+        }
+        
+        function updateDebugVisualizations() {
+            if (!DEBUG_MODE) return;
+            
+            // Update bounding box to match current model orientation
+            if (debugBoundingBox && viewerMesh) {
+                viewerScene.remove(debugBoundingBox);
+                const box = new THREE.Box3().setFromObject(viewerMesh);
+                debugBoundingBox = new THREE.Box3Helper(box, 0x00ffff);
+                debugBoundingBox.material.depthTest = false; // Render on top
+                debugBoundingBox.renderOrder = 998;
+                viewerScene.add(debugBoundingBox);
+            }
+        }
+        
+        function toggleDebugMode(enabled) {
+            DEBUG_MODE = enabled; // Update the global variable
+            
+            if (enabled) {
+                createDebugVisualizations();
+            } else {
+                if (debugOriginMarker) {
+                    viewerScene.remove(debugOriginMarker);
+                    debugOriginMarker = null;
+                }
+                if (debugBoundingBox) {
+                    viewerScene.remove(debugBoundingBox);
+                    debugBoundingBox = null;
+                }
+            }
+            if (viewerRenderer) {
+                viewerRenderer.render(viewerScene, viewerCamera);
+            }
+        }
+        
+        // Keyboard Navigation
+        document.addEventListener('keydown', (e) => {
+            if (document.getElementById('inspectionView').classList.contains('active')) {
+                if ((e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') && !document.getElementById('prevModelBtn').disabled) {
+                    navigateModel(-1);
+                } else if ((e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') && !document.getElementById('nextModelBtn').disabled) {
+                    navigateModel(1);
+                } else if (e.key === '0') {
+                    // Reset zoom to 1.0
+                    viewerControls.zoom = 1;
+                    updateViewerCamera();
+                    viewerRenderer.render(viewerScene, viewerCamera);
+                }
+            }
+        });
+        
+        function openInspectionView(index) {
+            if (index < 0 || index >= modelData.length) return;
+            
+            document.getElementById('duplicateView').classList.remove('active');
+            document.getElementById('inspectionView').classList.add('active');
+            
+            if (!viewerRenderer) {
+                initViewer();
+            }
+            
+            // Reset axis lock to free rotation
+            viewerControls.selectedAxis = null;
+            document.getElementById('lockXBtn').textContent = '🔓';
+            document.getElementById('lockYBtn').textContent = '🔓';
+            document.getElementById('lockZBtn').textContent = '🔓';
+            document.getElementById('lockXBtn').classList.remove('locked');
+            document.getElementById('lockYBtn').classList.remove('locked');
+            document.getElementById('lockZBtn').classList.remove('locked');
+            document.getElementById('xRotSlider').disabled = false;
+            document.getElementById('yRotSlider').disabled = false;
+            document.getElementById('zRotSlider').disabled = false;
+            
+            // Initialize nav buttons (will be properly set in loadModelInViewer)
+            document.getElementById('prevModelBtn').disabled = true;
+            document.getElementById('nextModelBtn').disabled = true;
+            
+            loadModelInViewer(index);
+        }
+        function markAsBadFile() {
+            if (currentViewerIndex < 0 || currentViewerIndex >= modelData.length) return;
+            
+            const model = modelData[currentViewerIndex];
+            
+            if (badFiles.has(model.filename)) {
+                alert('This file is already marked as bad.');
+                return;
+            }
+            
+            // Add to bad files set
+            badFiles.add(model.filename);
+            
+            // Remove from main table and duplicate table if present
+            const mainRow = document.getElementById(`row-${model.filename}`);
+            if (mainRow) mainRow.remove();
+            
+            const dupRow = document.getElementById(`marked-row-${model.filename}`);
+            if (dupRow) dupRow.remove();
+            
+            // Remove from marked duplicates if present
+            markedDuplicates.delete(model.filename);
+            
+            // Add to bad files table
+            addToBadFilesTable(model);
+            
+            updateStats();
+            updateTableHighlighting();
+            
+            // Move to next model if available
+            if (currentViewerIndex < modelData.length - 1) {
+                navigateModel(1);
+            } else if (currentViewerIndex > 0) {
+                navigateModel(-1);
+            }
+        }
+        
+        function addToBadFilesTable(model) {
+            document.getElementById('badFilesSection').style.display = 'block';
+            
+            const tbody = document.getElementById('badFilesTableBody');
+            const row = document.createElement('tr');
+            row.id = `bad-row-${model.filename}`;
+            row.classList.add('bad-file-row');
+            
+            const previewTd = document.createElement('td');
+            previewTd.style.textAlign = 'center';
+            const img = document.createElement('img');
+            img.src = model.screenshot;
+            img.className = 'thumbnail';
+            previewTd.appendChild(img);
+            row.appendChild(previewTd);
+            
+            const nameTd = document.createElement('td');
+            nameTd.className = 'filename';
+            
+            const deleteContainer = document.createElement('div');
+            deleteContainer.className = 'delete-box-container';
+            
+            const deleteLabel = document.createElement('div');
+            deleteLabel.className = 'delete-label';
+            deleteLabel.textContent = 'Delete:';
+            deleteContainer.appendChild(deleteLabel);
+            
+            const copyBox = document.createElement('div');
+            copyBox.className = 'delete-copy-box';
+            copyBox.textContent = model.filename;
+            copyBox.title = 'Click to copy';
+            copyBox.onclick = () => {
+                navigator.clipboard.writeText(model.filename).then(() => {
+                    const originalText = copyBox.textContent;
+                    copyBox.textContent = '✓ Copied!';
+                    setTimeout(() => {
+                        copyBox.textContent = originalText;
+                    }, 1000);
+                });
+            };
+            deleteContainer.appendChild(copyBox);
+            
+            nameTd.appendChild(deleteContainer);
+            row.appendChild(nameTd);
+            
+            const sizeTd = document.createElement('td');
+            sizeTd.className = 'filesize';
+            sizeTd.style.textAlign = 'right';
+            sizeTd.textContent = formatFileSize(model.filesize);
+            row.appendChild(sizeTd);
+            
+            const actionsTd = document.createElement('td');
+            actionsTd.style.textAlign = 'center';
+            const unmarkBtn = document.createElement('button');
+            unmarkBtn.className = 'btn btn-success btn-small';
+            unmarkBtn.textContent = '↩️ Unmark';
+            unmarkBtn.onclick = () => unmarkBadFile(model.filename);
+            actionsTd.appendChild(unmarkBtn);
+            row.appendChild(actionsTd);
+            
+            tbody.appendChild(row);
+        }
+        
+        function unmarkBadFile(filename) {
+            badFiles.delete(filename);
+            
+            const badRow = document.getElementById(`bad-row-${filename}`);
+            if (badRow) badRow.remove();
+            
+            const model = modelData.find(m => m.filename === filename);
+            if (model) addModelToTable(model);
+            
+            updateStats();
+            updateTableHighlighting();
+            
+            if (badFiles.size === 0) {
+                document.getElementById('badFilesSection').style.display = 'none';
+            }
+        }
+        
+        function exportDeletionCSV() {
+            // Collect all files to delete: bad files + marked duplicates
+            const filesToDelete = [
+                ...Array.from(badFiles),
+                ...Array.from(markedDuplicates.keys())
+            ];
+            
+            if (filesToDelete.length === 0) {
+                alert('No files marked for deletion.');
+                return;
+            }
+            
+            // Create CSV content (single column, no header)
+            const csvContent = filesToDelete.join('\n');
+            
+            // Create blob and download
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'files_to_delete.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        function updateTableHighlighting() {
+            // Get all duplicate groups
+            const duplicateGroups = new Map();
+            
+            modelData.forEach(model => {
+                if (!model.isDuplicate) return;
+                if (badFiles.has(model.filename)) return;
+                if (markedDuplicates.has(model.filename)) return;
+                
+                // Group by size matches
+                const sizeKey = `size_${model.filesize}`;
+                if (!duplicateGroups.has(sizeKey)) {
+                    duplicateGroups.set(sizeKey, []);
+                }
+                duplicateGroups.get(sizeKey).push(model);
+                
+                // Group by name matches
+                const nameKey = `name_${model.normalizedName}`;
+                if (!duplicateGroups.has(nameKey)) {
+                    duplicateGroups.set(nameKey, []);
+                }
+                duplicateGroups.get(nameKey).push(model);
+            });
+            
+            // Find which files should be kept (first alphabetically in each group)
+            const safeFiles = new Set();
+            duplicateGroups.forEach((group) => {
+                if (group.length > 1) {
+                    const sorted = [...group].sort((a, b) => a.filename.localeCompare(b.filename));
+                    safeFiles.add(sorted[0].filename);
+                }
+            });
+            
+            // Apply highlighting
+            modelData.forEach(model => {
+                const row = document.getElementById(`row-${model.filename}`);
+                if (!row) return;
+                
+                // Remove all highlighting classes
+                row.classList.remove('duplicate-row', 'bad-file-row', 'safe-duplicate-row');
+                
+                // Apply appropriate highlighting
+                if (badFiles.has(model.filename)) {
+                    row.classList.add('bad-file-row');
+                } else if (model.isDuplicate) {
+                    if (safeFiles.has(model.filename)) {
+                        row.classList.add('safe-duplicate-row'); // Green - this is the "keeper"
+                    } else {
+                        row.classList.add('duplicate-row'); // Yellow - candidate for deletion
+                    }
+                }
+            });
+        }
+        
+        function closeInspectionView() {
+            document.getElementById('inspectionView').classList.remove('active');
+            document.getElementById('duplicateView').classList.add('active');
+            
+            // Scroll to the current model's row in the table
+            if (currentViewerIndex >= 0 && currentViewerIndex < modelData.length) {
+                const model = modelData[currentViewerIndex];
+                const row = document.getElementById(`row-${model.filename}`);
+                
+                if (row) {
+                    // Small delay to ensure the view has switched
+                    setTimeout(() => {
+                        row.scrollIntoView({ 
+                            behavior: 'smooth', 
+                            block: 'center' 
+                        });
+                        
+                        // Highlight the row briefly
+                        row.style.transition = 'background 0.5s';
+                        const originalBackground = row.style.background;
+                        row.style.background = 'rgba(100, 150, 255, 0.3)';
+                        
+                        setTimeout(() => {
+                            row.style.background = originalBackground;
+                        }, 1500);
+                    }, 100);
+                }
+            }
+        }
+        
+        function parseSTL(buffer) {
+            const dataView = new DataView(buffer);
+            const n_faces = dataView.getUint32(80, true);
+            const expect = 80 + 4 + (n_faces * 50);
+            
+            if (expect === buffer.byteLength) {
+                return parseBinarySTL(buffer);
+            } else {
+                const decoder = new TextDecoder('utf-8');
+                const text = decoder.decode(buffer.slice(0, 1000));
+                if (text.toLowerCase().indexOf('solid') === 0 || text.indexOf('facet') !== -1) {
+                    return parseASCIISTL(decoder.decode(buffer));
+                }
+                return parseBinarySTL(buffer);
+            }
+        }
+        function parseBinarySTL(buffer) {
+            const geometry = new THREE.BufferGeometry();
+            const dataView = new DataView(buffer);
+            let offset = 80;
+            const triangles = dataView.getUint32(offset, true);
+            offset += 4;
+            
+            const vertices = new Float32Array(triangles * 9);
+            const normals = new Float32Array(triangles * 9);
+            
+            for (let i = 0; i < triangles; i++) {
+                const nx = dataView.getFloat32(offset, true);
+                const ny = dataView.getFloat32(offset + 4, true);
+                const nz = dataView.getFloat32(offset + 8, true);
+                offset += 12;
+                
+                for (let j = 0; j < 3; j++) {
+                    const idx = i * 9 + j * 3;
+                    vertices[idx] = dataView.getFloat32(offset, true);
+                    vertices[idx + 1] = dataView.getFloat32(offset + 4, true);
+                    vertices[idx + 2] = dataView.getFloat32(offset + 8, true);
+                    normals[idx] = nx;
+                    normals[idx + 1] = ny;
+                    normals[idx + 2] = nz;
+                    offset += 12;
+                }
+                offset += 2;
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+            return geometry;
+        }
+        function parseASCIISTL(text) {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const normals = [];
+            const lines = text.split('\n');
+            let normal = null;
+            let tempVertices = [];
+            
+            for (let line of lines) {
+                line = line.trim();
+                
+                if (line.startsWith('facet normal')) {
+                    const match = line.match(/facet\s+normal\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)/);
+                    if (match) normal = [parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])];
+                } else if (line.startsWith('vertex')) {
+                    const match = line.match(/vertex\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)/);
+                    if (match) tempVertices.push([parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])]);
+                } else if (line.startsWith('endfacet') && tempVertices.length === 3) {
+                    if (!normal) {
+                        const v1 = tempVertices[0], v2 = tempVertices[1], v3 = tempVertices[2];
+                        const ax = v2[0] - v1[0], ay = v2[1] - v1[1], az = v2[2] - v1[2];
+                        const bx = v3[0] - v1[0], by = v3[1] - v1[1], bz = v3[2] - v1[2];
+                        const nx = ay * bz - az * by, ny = az * bx - ax * bz, nz = ax * by - ay * bx;
+                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                        normal = [nx / len, ny / len, nz / len];
+                    }
+                    for (let v of tempVertices) {
+                        vertices.push(...v);
+                        normals.push(...normal);
+                    }
+                    tempVertices = [];
+                    normal = null;
+                }
+            }
+            
+            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+            geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3));
+            return geometry;
+        }
+        
+        function renderModelToCanvas(geometry) {
+            const canvas = document.getElementById('offscreenCanvas');
+            const renderer = new THREE.WebGLRenderer({ 
+                canvas: canvas, 
+                antialias: true, 
+                alpha: true,
+                preserveDrawingBuffer: true 
+            });
+            renderer.setSize(512, 512);
+            renderer.setClearColor(0x000000, 0);
+            
+            const scene = new THREE.Scene();
+            
+            const keyLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            keyLight.position.set(30, 20, -150);
+            scene.add(keyLight);
+            
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            fillLight.position.set(10, 5, 80);
+            scene.add(fillLight);
+            
+            geometry.center();
+            geometry.computeBoundingBox();
+            
+            const material = new THREE.MeshPhongMaterial({
+                color: 0xfff0f0,
+                emissive: 0x3b350c,
+                emissiveIntensity: 0.35,
+                shininess: 3,
+                side: THREE.DoubleSide
+            });
+            
+            const mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(0, 0, 0);
+            
+            // Apply auto-rotation if enabled (same as main viewer)
+            const autoRotateCheckbox = document.getElementById('autoRotateCheckbox');
+            const autoRotateEnabled = autoRotateCheckbox ? autoRotateCheckbox.checked : true; // Default true if checkbox doesn't exist yet
+            if (autoRotateEnabled) {
+                // Rotate 110 degrees around Z axis
+                mesh.rotation.z = 110 * Math.PI / 180;
+            }
+            
+            mesh.updateMatrixWorld(true);
+            scene.add(mesh);
+            
+            const box = new THREE.Box3().setFromObject(mesh);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            const maxDimension = Math.max(size.y, size.z);
+            const padding = 1.05;
+            const frustumSize = maxDimension * padding;
+            
+            const camera = new THREE.OrthographicCamera(
+                frustumSize / -2,
+                frustumSize / 2,
+                frustumSize / 2,
+                frustumSize / -2,
+                -1000,
+                1000
+            );
+            
+            camera.position.set(300, center.y, center.z);
+            camera.lookAt(center.x, center.y, center.z);
+            camera.up.set(0, 0, -1);
+            camera.updateProjectionMatrix();
+            
+            renderer.render(scene, camera);
+            
+            const originalDataURL = canvas.toDataURL('image/jpeg', 0.85);
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 512;
+            tempCanvas.height = 512;
+            const ctx = tempCanvas.getContext('2d');
+            
+            const img = new Image();
+            img.src = originalDataURL;
+            
+            return new Promise((resolve) => {
+                img.onload = () => {
+                    ctx.clearRect(0, 0, 512, 512);
+                    ctx.save();
+                    
+                    ctx.translate(256, 256);
+                    ctx.rotate(90 * Math.PI / 180);
+                    ctx.translate(-256, -256);
+                    
+                    ctx.drawImage(img, 0, 0);
+                    ctx.restore();
+                    
+                    const rotatedDataURL = tempCanvas.toDataURL('image/jpeg', 0.85);
+                    
+                    material.dispose();
+                    renderer.dispose();
+                    
+                    resolve(rotatedDataURL);
+                };
+            });
+        }
+        function getNormalizedName(filename) {
+            let name = filename.replace(/\.stl$/i, '');
+            // Remove ALL numbers, underscores, dashes, dots, and other symbols
+            // Keep only letters (a-z, A-Z)
+            name = name.replace(/[^a-zA-Z]/g, '').trim();
+            return name.toLowerCase();
+        }
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return (bytes / Math.pow(k, i)).toFixed(2) + ' ' + sizes[i];
+        }
+        
+        function setupUpload() {
+            const uploadSection = document.getElementById('uploadSection');
+            
+            uploadSection.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.stl';
+                input.multiple = true;
+                input.onchange = (e) => handleFiles(Array.from(e.target.files));
+                input.click();
+            });
+            uploadSection.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadSection.classList.add('dragover');
+            });
+            uploadSection.addEventListener('dragleave', () => {
+                uploadSection.classList.remove('dragover');
+            });
+            uploadSection.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadSection.classList.remove('dragover');
+                handleFiles(Array.from(e.dataTransfer.files));
+            });
+        }
+        async function handleFiles(files) {
+            const stlFiles = files.filter(f => f.name.toLowerCase().endsWith('.stl'));
+            
+            if (stlFiles.length === 0) {
+                alert('Please select STL files');
+                return;
+            }
+            const existingFilenames = new Set(modelData.map(m => m.filename));
+            const newFiles = stlFiles.filter(f => !existingFilenames.has(f.name));
+            
+            if (newFiles.length === 0) {
+                alert('All selected files have already been processed!');
+                return;
+            }
+            const progressContainer = document.getElementById('progressContainer');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            
+            progressContainer.style.display = 'block';
+            
+            progressText.textContent = 'Scanning for duplicates...';
+            
+            const allFileInfo = [
+                ...modelData.map(m => ({
+                    file: m.file,
+                    filename: m.filename,
+                    filesize: m.filesize,
+                    normalizedName: m.normalizedName,
+                    existing: true
+                })),
+                ...newFiles.map(file => ({
+                    file: file,
+                    filename: file.name,
+                    filesize: file.size,
+                    normalizedName: getNormalizedName(file.name),
+                    existing: false
+                }))
+            ];
+            const duplicateGroups = new Map();
+            const sizeGroups = new Map();
+            const nameGroups = new Map();
+            
+            // Group by exact file size
+            for (let info of allFileInfo) {
+                if (!sizeGroups.has(info.filesize)) {
+                    sizeGroups.set(info.filesize, []);
+                }
+                sizeGroups.get(info.filesize).push(info);
+            }
+            
+            // Group by normalized name (letters only)
+            for (let info of allFileInfo) {
+                if (!nameGroups.has(info.normalizedName)) {
+                    nameGroups.set(info.normalizedName, []);
+                }
+                nameGroups.get(info.normalizedName).push(info);
+            }
+            
+            // Mark as duplicate if EITHER:
+            // 1. Exact same file size (byte-for-byte match)
+            // 2. Same normalized name (letters only match)
+            const duplicateFilenames = new Set();
+            
+            // Check file size duplicates
+            sizeGroups.forEach((group) => {
+                if (group.length > 1) {
+                    group.forEach(info => duplicateFilenames.add(info.filename));
+                }
+            });
+            
+            // Check name duplicates
+            nameGroups.forEach((group) => {
+                if (group.length > 1) {
+                    group.forEach(info => duplicateFilenames.add(info.filename));
+                }
+            });
+            modelData.forEach(model => {
+                model.isDuplicate = duplicateFilenames.has(model.filename);
+            });
+            const newFilesToProcess = newFiles.map(file => ({
+                file: file,
+                filename: file.name,
+                filesize: file.size,
+                normalizedName: getNormalizedName(file.name),
+                isDuplicate: duplicateFilenames.has(file.name)
+            }));
+            newFilesToProcess.sort((a, b) => {
+                if (a.isDuplicate && !b.isDuplicate) return -1;
+                if (!a.isDuplicate && b.isDuplicate) return 1;
+                return a.filename.localeCompare(b.filename);
+            });
+            document.getElementById('tableBody').innerHTML = '';
+            
+            modelData.forEach(model => {
+                if (!markedDuplicates.has(model.filename)) {
+                    addModelToTable(model);
+                }
+            });
+            autoMarkEnabled = document.getElementById('autoMarkCheckbox').checked;
+            
+            for (let i = 0; i < newFilesToProcess.length; i++) {
+                const info = newFilesToProcess[i];
+                const progress = ((i + 1) / newFilesToProcess.length) * 100;
+                
+                progressFill.style.width = progress + '%';
+                progressFill.textContent = Math.round(progress) + '%';
+                progressText.textContent = `Processing ${i + 1} of ${newFilesToProcess.length}: ${info.filename}`;
+                try {
+                    const buffer = await info.file.arrayBuffer();
+                    const geometry = parseSTL(buffer);
+                    const screenshot = await renderModelToCanvas(geometry);
+                    geometry.dispose();
+                    
+                    const modelInfo = {
+                        file: info.file,
+                        filename: info.filename,
+                        filesize: info.filesize,
+                        screenshot: screenshot,
+                        normalizedName: info.normalizedName,
+                        isDuplicate: info.isDuplicate
+                    };
+                    
+                    modelData.push(modelInfo);
+                    
+                    if (!markedDuplicates.has(modelInfo.filename)) {
+                        addModelToTable(modelInfo);
+                    }
+                    
+                    if (autoMarkEnabled && modelInfo.isDuplicate) {
+                        // Find duplicates by EITHER size OR name
+                        const sizeMatches = modelData.filter(m => 
+                            m.filesize === modelInfo.filesize && m.filename !== modelInfo.filename
+                        );
+                        const nameMatches = modelData.filter(m => 
+                            m.normalizedName === modelInfo.normalizedName && m.filename !== modelInfo.filename
+                        );
+                        
+                        // Combine both matches and find the first one alphabetically
+                        const allMatches = [...new Set([...sizeMatches, ...nameMatches])];
+                        allMatches.sort((a, b) => a.filename.localeCompare(b.filename));
+                        
+                        if (allMatches.length > 0) {
+                            markAsDuplicate(modelInfo.filename, allMatches[0].filename);
+                        }
+                    }
+                    
+                } catch (error) {
+                    console.error('Error processing', info.filename, error);
+                }
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            progressContainer.style.display = 'none';
+            updateStats();
+            updateTableHighlighting(); // Apply color highlighting
+            
+            document.getElementById('clearBtn').disabled = false;
+            document.getElementById('downloadAllBtn').disabled = false;
+            document.getElementById('recheckBtn').disabled = false;
+        }
+        function addModelToTable(model) {
+            // Don't add if it's a bad file
+            if (badFiles.has(model.filename)) return;
+            
+            // Don't add if it's marked as duplicate
+            if (markedDuplicates.has(model.filename)) return;
+            
+            const tbody = document.getElementById('tableBody');
+            
+            const row = document.createElement('tr');
+            row.id = `row-${model.filename}`;
+            
+            const previewTd = document.createElement('td');
+            previewTd.style.textAlign = 'center';
+            const img = document.createElement('img');
+            img.src = model.screenshot;
+            img.className = 'thumbnail';
+            img.style.cursor = 'pointer';
+            img.title = 'Click to inspect in 3D viewer';
+            img.onclick = () => {
+                const modelIndex = modelData.findIndex(m => m.filename === model.filename);
+                if (modelIndex !== -1) {
+                    openInspectionView(modelIndex);
+                }
+            };
+            
+            previewTd.appendChild(img);
+            row.appendChild(previewTd);
+            
+            const nameTd = document.createElement('td');
+            nameTd.className = 'filename';
+            nameTd.textContent = model.filename;
+            row.appendChild(nameTd);
+            
+            const sizeTd = document.createElement('td');
+            sizeTd.className = 'filesize';
+            sizeTd.style.textAlign = 'right';
+            sizeTd.textContent = formatFileSize(model.filesize);
+            row.appendChild(sizeTd);
+            
+            const actionsTd = document.createElement('td');
+            actionsTd.style.textAlign = 'center';
+            
+            const downloadBtn = document.createElement('button');
+            downloadBtn.className = 'btn btn-primary btn-small';
+            downloadBtn.textContent = '📷 Hands & Feet';
+            downloadBtn.onclick = () => downloadScreenshot(model);
+            actionsTd.appendChild(downloadBtn);
+            
+            actionsTd.appendChild(document.createTextNode(' '));
+            
+            const markBtn = document.createElement('button');
+            markBtn.className = 'btn btn-danger btn-small';
+            markBtn.id = `mark-btn-${model.filename}`;
+            markBtn.textContent = '🗑️ Mark';
+            markBtn.onclick = () => toggleMarkDuplicate(model);
+            actionsTd.appendChild(markBtn);
+            
+            row.appendChild(actionsTd);
+            
+            tbody.appendChild(row);
+        }
+        function markAsDuplicate(duplicateFilename, originalFilename) {
+            markedDuplicates.set(duplicateFilename, originalFilename);
+            
+            const row = document.getElementById(`row-${duplicateFilename}`);
+            if (row) row.remove();
+            
+            addToMarkedDuplicatesTable(duplicateFilename, originalFilename);
+            
+            const btn = document.getElementById(`mark-btn-${duplicateFilename}`);
+            if (btn) btn.textContent = '✓ Marked';
+            
+            updateStats();
+        }
+        function unmarkDuplicate(duplicateFilename) {
+            markedDuplicates.delete(duplicateFilename);
+            
+            const markedRow = document.getElementById(`marked-row-${duplicateFilename}`);
+            if (markedRow) markedRow.remove();
+            
+            const model = modelData.find(m => m.filename === duplicateFilename);
+            if (model) addModelToTable(model);
+            
+            updateStats();
+            
+            if (markedDuplicates.size === 0) {
+                document.getElementById('markedDuplicatesSection').style.display = 'none';
+            }
+        }
+        function addToMarkedDuplicatesTable(duplicateFilename, originalFilename) {
+            document.getElementById('markedDuplicatesSection').style.display = 'block';
+            
+            const tbody = document.getElementById('markedDuplicatesTableBody');
+            const row = document.createElement('tr');
+            row.id = `marked-row-${duplicateFilename}`;
+            row.classList.add('marked-duplicate');
+            
+            const duplicateModel = modelData.find(m => m.filename === duplicateFilename);
+            const originalModel = modelData.find(m => m.filename === originalFilename);
+            
+            const dupPreviewTd = document.createElement('td');
+            dupPreviewTd.style.textAlign = 'center';
+            const dupImg = document.createElement('img');
+            dupImg.src = duplicateModel.screenshot;
+            dupImg.className = 'thumbnail';
+            dupPreviewTd.appendChild(dupImg);
+            row.appendChild(dupPreviewTd);
+            
+            const dupNameTd = document.createElement('td');
+            dupNameTd.className = 'filename';
+            
+            const deleteContainer = document.createElement('div');
+            deleteContainer.className = 'delete-box-container';
+            
+            const deleteLabel = document.createElement('div');
+            deleteLabel.className = 'delete-label';
+            deleteLabel.textContent = 'Delete:';
+            deleteContainer.appendChild(deleteLabel);
+            
+            const copyBox = document.createElement('div');
+            copyBox.className = 'delete-copy-box';
+            copyBox.textContent = duplicateFilename;
+            copyBox.title = 'Click to copy';
+            copyBox.onclick = () => {
+                navigator.clipboard.writeText(duplicateFilename).then(() => {
+                    const originalText = copyBox.textContent;
+                    copyBox.textContent = '✓ Copied!';
+                    setTimeout(() => {
+                        copyBox.textContent = originalText;
+                    }, 1000);
+                });
+            };
+            deleteContainer.appendChild(copyBox);
+            
+            dupNameTd.appendChild(deleteContainer);
+            row.appendChild(dupNameTd);
+            
+            const origPreviewTd = document.createElement('td');
+            origPreviewTd.style.textAlign = 'center';
+            const origImg = document.createElement('img');
+            origImg.src = originalModel.screenshot;
+            origImg.className = 'thumbnail';
+            origPreviewTd.appendChild(origImg);
+            row.appendChild(origPreviewTd);
+            
+            const origNameTd = document.createElement('td');
+            origNameTd.className = 'filename';
+            origNameTd.textContent = originalFilename;
+            row.appendChild(origNameTd);
+            
+            const actionsTd = document.createElement('td');
+            actionsTd.style.textAlign = 'center';
+            const unmarkBtn = document.createElement('button');
+            unmarkBtn.className = 'btn btn-success btn-small';
+            unmarkBtn.textContent = '↩️ Unmark';
+            unmarkBtn.onclick = () => unmarkDuplicate(duplicateFilename);
+            actionsTd.appendChild(unmarkBtn);
+            row.appendChild(actionsTd);
+            
+            tbody.appendChild(row);
+        }
+        function toggleMarkDuplicate(model) {
+            if (markedDuplicates.has(model.filename)) {
+                unmarkDuplicate(model.filename);
+            } else {
+                // Find duplicates by EITHER size OR name
+                const sizeMatches = modelData.filter(m => 
+                    m.filesize === model.filesize && m.filename !== model.filename && m.isDuplicate
+                );
+                const nameMatches = modelData.filter(m => 
+                    m.normalizedName === model.normalizedName && m.filename !== model.filename && m.isDuplicate
+                );
+                
+                // Combine both matches and find the first one alphabetically
+                const allMatches = [...new Set([...sizeMatches, ...nameMatches])];
+                allMatches.sort((a, b) => a.filename.localeCompare(b.filename));
+                
+                if (allMatches.length > 0) {
+                    markAsDuplicate(model.filename, allMatches[0].filename);
+                }
+            }
+        }
+        function updateStats() {
+            const duplicateModels = modelData.filter(m => m.isDuplicate);
+            
+            document.getElementById('totalFiles').textContent = modelData.length;
+            document.getElementById('badFilesCount').textContent = badFiles.size;
+            document.getElementById('duplicateCount').textContent = duplicateModels.length;
+            document.getElementById('markedCount').textContent = markedDuplicates.size;
+            
+            // Enable/disable export button
+            const totalToDelete = badFiles.size + markedDuplicates.size;
+            document.getElementById('exportDeletionCSVBtn').disabled = (totalToDelete === 0);
+        }
+        async function recheckDuplicates() {
+            const progressContainer = document.getElementById('progressContainer');
+            const progressText = document.getElementById('progressText');
+            
+            progressContainer.style.display = 'block';
+            progressText.textContent = 'Rechecking...';
+            
+            const stillExistingMarked = new Map();
+            const stillExistingBad = new Set();
+            
+            // Check marked duplicates still exist
+            for (let [dupFilename, origFilename] of markedDuplicates) {
+                const dupModel = modelData.find(m => m.filename === dupFilename);
+                const origModel = modelData.find(m => m.filename === origFilename);
+                
+                if (dupModel && origModel) {
+                    stillExistingMarked.set(dupFilename, origFilename);
+                }
+            }
+            
+            // Check bad files still exist
+            for (let badFilename of badFiles) {
+                const badModel = modelData.find(m => m.filename === badFilename);
+                if (badModel) {
+                    stillExistingBad.add(badFilename);
+                }
+            }
+            
+            const removedDuplicates = markedDuplicates.size - stillExistingMarked.size;
+            const removedBadFiles = badFiles.size - stillExistingBad.size;
+            
+            markedDuplicates = stillExistingMarked;
+            badFiles = stillExistingBad;
+            
+            // Rebuild tables
+            const markedTbody = document.getElementById('markedDuplicatesTableBody');
+            markedTbody.innerHTML = '';
+            
+            for (let [dupFilename, origFilename] of markedDuplicates) {
+                addToMarkedDuplicatesTable(dupFilename, origFilename);
+            }
+            
+            const badTbody = document.getElementById('badFilesTableBody');
+            badTbody.innerHTML = '';
+            
+            for (let badFilename of badFiles) {
+                const model = modelData.find(m => m.filename === badFilename);
+                if (model) addToBadFilesTable(model);
+            }
+            
+            if (markedDuplicates.size === 0) {
+                document.getElementById('markedDuplicatesSection').style.display = 'none';
+            }
+            
+            if (badFiles.size === 0) {
+                document.getElementById('badFilesSection').style.display = 'none';
+            }
+            
+            updateStats();
+            progressContainer.style.display = 'none';
+            
+            alert(`Recheck complete!\n${removedDuplicates} marked duplicate(s) removed.\n${removedBadFiles} bad file(s) removed.`);
+        }
+        function clearAll() {
+            if (!confirm('Clear all models?')) return;
+            
+            modelData = [];
+            markedDuplicates.clear();
+            badFiles.clear();
+            currentViewerIndex = 0;
+            
+            document.getElementById('tableBody').innerHTML = '<tr><td colspan="4" class="no-data">No models loaded</td></tr>';
+            document.getElementById('markedDuplicatesTableBody').innerHTML = '';
+            document.getElementById('badFilesTableBody').innerHTML = '';
+            document.getElementById('markedDuplicatesSection').style.display = 'none';
+            document.getElementById('badFilesSection').style.display = 'none';
+            
+            document.getElementById('totalFiles').textContent = '0';
+            document.getElementById('badFilesCount').textContent = '0';
+            document.getElementById('duplicateCount').textContent = '0';
+            document.getElementById('markedCount').textContent = '0';
+            
+            document.getElementById('clearBtn').disabled = true;
+            document.getElementById('downloadAllBtn').disabled = true;
+            document.getElementById('recheckBtn').disabled = true;
+            document.getElementById('exportDeletionCSVBtn').disabled = true;
+            
+            if (viewerRenderer) {
+                viewerRenderer.dispose();
+                viewerRenderer = null;
+                viewerScene = null;
+                viewerCamera = null;
+                viewerMesh = null;
+            }
+        }
+        function downloadScreenshot(model) {
+            const link = document.createElement('a');
+            link.href = model.screenshot;
+            const nameWithoutExt = model.filename.replace(/\.stl$/i, '');
+            link.download = `${nameWithoutExt}_inspection.jpg`;
+            link.click();
+        }
+        function downloadAllScreenshots() {
+            modelData.forEach((model, index) => {
+                setTimeout(() => {
+                    downloadScreenshot(model);
+                }, index * 300);
+            });
+        }
+        
+        function initViewer() {
+            const canvas = document.getElementById('viewerCanvas');
+            
+            viewerRenderer = new THREE.WebGLRenderer({ 
+                canvas: canvas, 
+                antialias: true,
+                preserveDrawingBuffer: true  // CRITICAL: Required for toDataURL() to work!
+            });
+            viewerRenderer.setSize(1080, 1080, false);
+            viewerRenderer.setClearColor(0x2a2a2a);
+            viewerRenderer.shadowMap.enabled = true;
+            
+            viewerScene = new THREE.Scene();
+            viewerScene.background = new THREE.Color(0x2a2a2a);
+            
+            const keyLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            keyLight.position.set(30, 20, -150);
+            keyLight.castShadow = false;
+            viewerScene.add(keyLight);
+            
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            fillLight.position.set(10, 5, 80);
+            viewerScene.add(fillLight);
+            
+            const frustumSize = 120;
+            viewerCamera = new THREE.OrthographicCamera(
+                frustumSize / -2, frustumSize / 2,
+                frustumSize / 2, frustumSize / -2,
+                -1000, 1000
+            );
+            viewerCamera.position.set(300, 0, 0);
+            viewerCamera.lookAt(0, 0, 0);
+            viewerCamera.up.set(0, 0, -1);
+            viewerCamera.updateProjectionMatrix();
+            
+            setupViewerControls(canvas);
+            setupRotationSliders();
+            
+            window.addEventListener('resize', () => {
+                viewerRenderer.render(viewerScene, viewerCamera);
+            });
+        }
+        function setupRotationSliders() {
+            const xSlider = document.getElementById('xRotSlider');
+            const ySlider = document.getElementById('yRotSlider');
+            const zSlider = document.getElementById('zRotSlider');
+            
+            xSlider.addEventListener('input', (e) => {
+                viewerControls.rotation.x = parseFloat(e.target.value);
+                document.getElementById('xRotValue').textContent = Math.round(viewerControls.rotation.x) + '°';
+                updateModelRotation();
+            });
+            
+            xSlider.addEventListener('change', () => {
+                createRGBBoundingBox();
+            });
+            
+            ySlider.addEventListener('input', (e) => {
+                viewerControls.rotation.y = parseFloat(e.target.value);
+                document.getElementById('yRotValue').textContent = Math.round(viewerControls.rotation.y) + '°';
+                updateModelRotation();
+            });
+            
+            ySlider.addEventListener('change', () => {
+                createRGBBoundingBox();
+            });
+            
+            zSlider.addEventListener('input', (e) => {
+                viewerControls.rotation.z = parseFloat(e.target.value);
+                document.getElementById('zRotValue').textContent = Math.round(viewerControls.rotation.z) + '°';
+                updateModelRotation();
+            });
+            
+            zSlider.addEventListener('change', () => {
+                createRGBBoundingBox();
+            });
+        }
+        function updateModelRotation() {
+            if (!viewerMesh || !boundingBoxHelper) return;
+            
+            const relativeQuat = new THREE.Quaternion();
+            
+            const baseXAxis = new THREE.Vector3(1, 0, 0).applyQuaternion(baseCageRotation);
+            const baseYAxis = new THREE.Vector3(0, 1, 0).applyQuaternion(baseCageRotation);
+            const baseZAxis = new THREE.Vector3(0, 0, 1).applyQuaternion(baseCageRotation);
+            
+            if (viewerControls.rotation.x !== 0) {
+                const xRotQuat = new THREE.Quaternion().setFromAxisAngle(
+                    baseXAxis, 
+                    viewerControls.rotation.x * Math.PI / 180
+                );
+                relativeQuat.premultiply(xRotQuat);
+            }
+            
+            if (viewerControls.rotation.y !== 0) {
+                const yRotQuat = new THREE.Quaternion().setFromAxisAngle(
+                    baseYAxis, 
+                    viewerControls.rotation.y * Math.PI / 180
+                );
+                relativeQuat.premultiply(yRotQuat);
+            }
+            
+            if (viewerControls.rotation.z !== 0) {
+                const zRotQuat = new THREE.Quaternion().setFromAxisAngle(
+                    baseZAxis, 
+                    viewerControls.rotation.z * Math.PI / 180
+                );
+                relativeQuat.premultiply(zRotQuat);
+            }
+            
+            viewerMesh.quaternion.copy(baseModelRotation).premultiply(relativeQuat);
+            boundingBoxHelper.quaternion.copy(baseCageRotation).premultiply(relativeQuat);
+            
+            if (rotationIndicators) {
+                rotationIndicators.quaternion.copy(baseCageRotation).premultiply(relativeQuat);
+            }
+            
+            // Update debug visualizations
+            updateDebugVisualizations();
+            
+            viewerRenderer.render(viewerScene, viewerCamera);
+        }
+        function setupViewerControls(canvas) {
+            // Track mouse position continuously
+            canvas.addEventListener('mousemove', (e) => {
+                const rect = canvas.getBoundingClientRect();
+                viewerControls.currentMouse.x = e.clientX - rect.left;
+                viewerControls.currentMouse.y = e.clientY - rect.top;
+                
+                if (viewerControls.isDragging) {
+                    const deltaX = e.clientX - viewerControls.previousMouse.x;
+                    const deltaY = e.clientY - viewerControls.previousMouse.y;
+                    
+                    if (viewerControls.selectedAxis === null) {
+                        viewerControls.rotation.z += deltaX * 0.5;
+                        viewerControls.rotation.y += deltaY * 0.5;
+                        
+                        viewerControls.rotation.y = Math.max(-180, Math.min(180, viewerControls.rotation.y));
+                        viewerControls.rotation.z = Math.max(-180, Math.min(180, viewerControls.rotation.z));
+                        
+                        document.getElementById('yRotSlider').value = viewerControls.rotation.y;
+                        document.getElementById('zRotSlider').value = viewerControls.rotation.z;
+                        document.getElementById('yRotValue').textContent = Math.round(viewerControls.rotation.y) + '°';
+                        document.getElementById('zRotValue').textContent = Math.round(viewerControls.rotation.z) + '°';
+                    } else {
+                        if (viewerControls.selectedAxis === 'x') {
+                            viewerControls.rotation.x += deltaY * 0.5;
+                            viewerControls.rotation.x = Math.max(-180, Math.min(180, viewerControls.rotation.x));
+                            document.getElementById('xRotSlider').value = viewerControls.rotation.x;
+                            document.getElementById('xRotValue').textContent = Math.round(viewerControls.rotation.x) + '°';
+                        } else if (viewerControls.selectedAxis === 'y') {
+                            viewerControls.rotation.y += deltaX * 0.5;
+                            viewerControls.rotation.y = Math.max(-180, Math.min(180, viewerControls.rotation.y));
+                            document.getElementById('yRotSlider').value = viewerControls.rotation.y;
+                            document.getElementById('yRotValue').textContent = Math.round(viewerControls.rotation.y) + '°';
+                        } else if (viewerControls.selectedAxis === 'z') {
+                            viewerControls.rotation.z += deltaY * 0.5;
+                            viewerControls.rotation.z = Math.max(-180, Math.min(180, viewerControls.rotation.z));
+                            document.getElementById('zRotSlider').value = viewerControls.rotation.z;
+                            document.getElementById('zRotValue').textContent = Math.round(viewerControls.rotation.z) + '°';
+                        }
+                    }
+                    
+                    updateModelRotation();
+                    viewerControls.previousMouse = { x: e.clientX, y: e.clientY };
+                } else if (viewerControls.isRightDragging) {
+                    const deltaX = e.clientX - viewerControls.previousMouse.x;
+                    const deltaY = e.clientY - viewerControls.previousMouse.y;
+                    
+                    /*
+                     * ═══════════════════════════════════════════════════════════════════════════
+                     * RIGHT-MOUSE PAN WITH 90° ROTATION COMPENSATION
+                     * ═══════════════════════════════════════════════════════════════════════════
+                     * 
+                     * Canvas is rotated 90° clockwise, so we need to rotate mouse deltas:
+                     * - Moving mouse RIGHT (positive deltaX) should pan RIGHT in rotated view
+                     * - Moving mouse DOWN (positive deltaY) should pan DOWN in rotated view
+                     * 
+                     * For 90° clockwise CSS rotation, the correct transform is:
+                     * - rotatedDeltaX = -deltaY (mouse up/down controls horizontal pan)
+                     * - rotatedDeltaY = deltaX (mouse left/right controls vertical pan)
+                     * ═══════════════════════════════════════════════════════════════════════════
+                     */
+                    
+                    // Apply rotation transform to match visual space
+                    const rotatedDeltaX = -deltaY;  // Mouse vertical → horizontal pan
+                    const rotatedDeltaY = -deltaX;  // Mouse horizontal → vertical pan (negated for correct direction)
+                    
+                    viewerControls.pan.x += rotatedDeltaX * 0.1;
+                    viewerControls.pan.y += rotatedDeltaY * 0.1;
+                    
+                    updateViewerCamera();
+                    viewerRenderer.render(viewerScene, viewerCamera);
+                    viewerControls.previousMouse = { x: e.clientX, y: e.clientY };
+                }
+            });
+            
+            canvas.addEventListener('mousedown', (e) => {
+                if (e.button === 0) {
+                    viewerControls.isDragging = true;
+                    viewerControls.previousMouse = { x: e.clientX, y: e.clientY };
+                } else if (e.button === 2) {
+                    e.preventDefault();
+                    viewerControls.isRightDragging = true;
+                    viewerControls.previousMouse = { x: e.clientX, y: e.clientY };
+                }
+            });
+            
+            canvas.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            });
+            
+            canvas.addEventListener('mouseup', () => {
+                if (viewerControls.isDragging) {
+                    createRGBBoundingBox();
+                }
+                
+                viewerControls.isDragging = false;
+                viewerControls.isRightDragging = false;
+            });
+            
+            canvas.addEventListener('mouseleave', () => {
+                viewerControls.isDragging = false;
+                viewerControls.isRightDragging = false;
+            });
+            
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                
+                // Get canvas dimensions
+                const rect = canvas.getBoundingClientRect();
+                const canvasWidth = rect.width;
+                const canvasHeight = rect.height;
+                
+                /*
+                 * ═══════════════════════════════════════════════════════════════════════════
+                 * MOUSE-POSITION ZOOM WITH 90° ROTATION COMPENSATION
+                 * ═══════════════════════════════════════════════════════════════════════════
+                 * 
+                 * CHALLENGE: The canvas has CSS transform: rotate(90deg), which means:
+                 * - Browser reports mouse in ORIGINAL (unrotated) space
+                 * - But the image we see is rotated 90° clockwise
+                 * - We need to "unrotate" mouse coords to match what user sees
+                 * 
+                 * VISUAL ROTATION (what user sees):
+                 *   Top of screen    → Shows what was RIGHT side of canvas
+                 *   Right of screen  → Shows what was BOTTOM of canvas
+                 *   Bottom of screen → Shows what was LEFT side of canvas
+                 *   Left of screen   → Shows what was TOP of canvas
+                 * 
+                 * COORDINATE TRANSFORM:
+                 * To convert from browser coords to rotated visual space:
+                 * 1. Start with mouse position in canvas (x, y)
+                 * 2. Apply 90° COUNTER-clockwise rotation (inverse of the CSS rotation)
+                 * 3. This gives us coordinates in the visual space
+                 * 
+                 * FORMULA (90° counter-clockwise around center):
+                 *   rotatedX = y
+                 *   rotatedY = (canvasWidth - x)
+                 * 
+                 * WHY: Because CSS rotates clockwise, we rotate counter-clockwise to "undo" it
+                 * ═══════════════════════════════════════════════════════════════════════════
+                 */
+                
+                // Get mouse position relative to canvas center
+                const centerX = canvasWidth / 2;
+                const centerY = canvasHeight / 2;
+                const mouseX = viewerControls.currentMouse.x - centerX;
+                const mouseY = viewerControls.currentMouse.y - centerY;
+                
+                // Apply inverse rotation (90° counter-clockwise) to compensate for CSS rotation
+                // This transforms browser coords to match the visual (rotated) space
+                const rotatedMouseX = mouseY;  // What was vertical becomes horizontal
+                const rotatedMouseY = mouseX;  // What was horizontal becomes vertical
+                
+                // Convert rotated mouse position to normalized coordinates (-0.5 to 0.5)
+                const normalizedX = rotatedMouseX / canvasWidth;
+                const normalizedY = rotatedMouseY / canvasHeight;
+                
+                // Calculate current frustum size
+                const baseFrustumSize = 120;
+                const currentFrustumSize = baseFrustumSize / viewerControls.zoom;
+                
+                // Calculate world position of mouse cursor before zoom
+                const mouseWorldX = normalizedX * currentFrustumSize + viewerControls.pan.x;
+                const mouseWorldY = normalizedY * currentFrustumSize + viewerControls.pan.y;
+                
+                // Update zoom (NO UPPER LIMIT - can zoom infinitely)
+                if (e.deltaY < 0) {
+                    viewerControls.zoom = Math.min(1000, viewerControls.zoom + 0.1); // Max 1000x zoom
+                } else {
+                    viewerControls.zoom = Math.max(0.5, viewerControls.zoom - 0.1);
+                }
+                
+                // Calculate new frustum size
+                const newFrustumSize = baseFrustumSize / viewerControls.zoom;
+                
+                // Adjust pan to keep mouse position fixed in world space
+                // After zoom, what was at mouseWorldX/Y should still be under the cursor
+                viewerControls.pan.x = mouseWorldX - (normalizedX * newFrustumSize);
+                viewerControls.pan.y = mouseWorldY - (normalizedY * newFrustumSize);
+                
+                updateViewerCamera();
+                viewerRenderer.render(viewerScene, viewerCamera);
+            });
+        }
+        function toggleAxisLock(axis) {
+            // If this axis is already locked, unlock it
+            if (viewerControls.selectedAxis === axis) {
+                viewerControls.selectedAxis = null;
+                
+                // Update all lock buttons to unlocked
+                document.getElementById('lockXBtn').textContent = '🔓';
+                document.getElementById('lockYBtn').textContent = '🔓';
+                document.getElementById('lockZBtn').textContent = '🔓';
+                document.getElementById('lockXBtn').classList.remove('locked');
+                document.getElementById('lockYBtn').classList.remove('locked');
+                document.getElementById('lockZBtn').classList.remove('locked');
+                
+                // Enable all sliders
+                document.getElementById('xRotSlider').disabled = false;
+                document.getElementById('yRotSlider').disabled = false;
+                document.getElementById('zRotSlider').disabled = false;
+            } else {
+                // Lock to this axis
+                viewerControls.selectedAxis = axis;
+                
+                // Update lock button states
+                const lockXBtn = document.getElementById('lockXBtn');
+                const lockYBtn = document.getElementById('lockYBtn');
+                const lockZBtn = document.getElementById('lockZBtn');
+                
+                lockXBtn.textContent = '🔓';
+                lockYBtn.textContent = '🔓';
+                lockZBtn.textContent = '🔓';
+                lockXBtn.classList.remove('locked');
+                lockYBtn.classList.remove('locked');
+                lockZBtn.classList.remove('locked');
+                
+                // Lock the selected axis
+                if (axis === 'x') {
+                    lockXBtn.textContent = '🔒';
+                    lockXBtn.classList.add('locked');
+                    document.getElementById('xRotSlider').disabled = false;
+                    document.getElementById('yRotSlider').disabled = true;
+                    document.getElementById('zRotSlider').disabled = true;
+                } else if (axis === 'y') {
+                    lockYBtn.textContent = '🔒';
+                    lockYBtn.classList.add('locked');
+                    document.getElementById('xRotSlider').disabled = true;
+                    document.getElementById('yRotSlider').disabled = false;
+                    document.getElementById('zRotSlider').disabled = true;
+                } else if (axis === 'z') {
+                    lockZBtn.textContent = '🔒';
+                    lockZBtn.classList.add('locked');
+                    document.getElementById('xRotSlider').disabled = true;
+                    document.getElementById('yRotSlider').disabled = true;
+                    document.getElementById('zRotSlider').disabled = false;
+                }
+            }
+            
+            updateRotationIndicators();
+        }
+        function selectRotationAxis(axis) {
+            viewerControls.selectedAxis = axis;
+            
+            document.querySelectorAll('.axis-select-btn').forEach(btn => btn.classList.remove('selected'));
+            
+            if (axis === 'x') {
+                document.getElementById('selectXAxis').classList.add('selected');
+            } else if (axis === 'y') {
+                document.getElementById('selectYAxis').classList.add('selected');
+            } else if (axis === 'z') {
+                document.getElementById('selectZAxis').classList.add('selected');
+            } else {
+                document.getElementById('selectFreeAxis').classList.add('selected');
+            }
+            
+            updateRotationIndicators();
+        }
+        async function loadModelInViewer(index) {
+            if (index < 0 || index >= modelData.length) return;
+            
+            currentViewerIndex = index;
+            const model = modelData[index];
+            
+            if (viewerMesh) {
+                viewerScene.remove(viewerMesh);
+                viewerMesh.geometry.dispose();
+                viewerMesh.material.dispose();
+            }
+            
+            if (boundingBoxHelper) {
+                viewerScene.remove(boundingBoxHelper);
+            }
+            
+            if (rotationIndicators) {
+                viewerScene.remove(rotationIndicators);
+            }
+            
+            const buffer = await model.file.arrayBuffer();
+            const geometry = parseSTL(buffer);
+            geometry.center();
+            geometry.computeBoundingBox();
+            
+            const box = geometry.boundingBox;
+            const size = box.getSize(new THREE.Vector3());
+            const maxDimension = Math.max(size.x, size.y, size.z);
+            const scale = 100 / maxDimension;
+            geometry.scale(scale, scale, scale);
+            geometry.computeBoundingBox();
+            geometry.center();
+            
+            const material = new THREE.MeshPhongMaterial({
+                color: 0xfff0f0,
+                emissive: 0x3b350c,
+                emissiveIntensity: 0.35,
+                shininess: 3,
+                side: THREE.DoubleSide
+            });
+            
+            viewerMesh = new THREE.Mesh(geometry, material);
+            viewerMesh.castShadow = false;
+            viewerMesh.receiveShadow = false;
+            
+            // Apply auto-rotation if enabled
+            const autoRotateEnabled = document.getElementById('autoRotateCheckbox').checked;
+            if (autoRotateEnabled) {
+                // Rotate 110 degrees around Z axis (what user sees as Z due to camera orientation)
+                viewerMesh.rotation.z = 110 * Math.PI / 180;
+            }
+            
+            viewerScene.add(viewerMesh);
+            
+            createRGBBoundingBox();
+            
+            // Create debug visualizations if enabled
+            createDebugVisualizations();
+            
+            updateViewerCamera();
+            viewerRenderer.render(viewerScene, viewerCamera);
+            
+            document.getElementById('viewerTitle').textContent = model.filename;
+            document.getElementById('viewerInfo').textContent = `Model ${index + 1} of ${modelData.length}`;
+            
+            // Enable/disable nav buttons based on position and total count
+            const prevBtn = document.getElementById('prevModelBtn');
+            const nextBtn = document.getElementById('nextModelBtn');
+            
+            if (modelData.length <= 1) {
+                // Only one model - disable both buttons
+                prevBtn.disabled = true;
+                nextBtn.disabled = true;
+            } else {
+                // Multiple models - enable/disable based on position
+                prevBtn.disabled = (index <= 0);
+                nextBtn.disabled = (index >= modelData.length - 1);
+            }
+        }
+        function createRGBBoundingBox() {
+            if (!viewerMesh) return;
+            
+            if (boundingBoxHelper) {
+                viewerScene.remove(boundingBoxHelper);
+            }
+            if (rotationIndicators) {
+                viewerScene.remove(rotationIndicators);
+            }
+            
+            baseModelRotation.copy(viewerMesh.quaternion);
+            baseCageRotation.identity();
+            
+            viewerControls.rotation = { x: 0, y: 0, z: 0 };
+            
+            document.getElementById('xRotSlider').value = 0;
+            document.getElementById('yRotSlider').value = 0;
+            document.getElementById('zRotSlider').value = 0;
+            document.getElementById('xRotValue').textContent = '0°';
+            document.getElementById('yRotValue').textContent = '0°';
+            document.getElementById('zRotValue').textContent = '0°';
+            
+            viewerMesh.updateMatrixWorld(true);
+            
+            const box = new THREE.Box3().setFromObject(viewerMesh);
+            const size = box.getSize(new THREE.Vector3());
+            
+            const maxDim = Math.max(size.x, size.y, size.z);
+            
+            const group = new THREE.Group();
+            group.visible = false;
+            
+            viewerScene.add(group);
+            boundingBoxHelper = group;
+            boundingBoxHelper.userData.bboxSize = maxDim;
+            boundingBoxHelper.castShadow = false;
+            boundingBoxHelper.receiveShadow = false;
+            
+            createRotationIndicators(maxDim);
+            updateRotationIndicators();
+            
+            // Update debug visualizations
+            createDebugVisualizations();
+        }
+        function createRotationIndicators(bboxMaxDim) {
+            if (!viewerMesh) return;
+            
+            const group = new THREE.Group();
+            const radius = bboxMaxDim * 0.6;
+            const tubeRadius = 0.8;
+            
+            const xTorusGeometry = new THREE.TorusGeometry(radius, tubeRadius, 8, 64);
+            const xTorusMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff0000,
+                transparent: true,
+                opacity: 0.6
+            });
+            const xTorus = new THREE.Mesh(xTorusGeometry, xTorusMaterial);
+            xTorus.rotation.y = Math.PI / 2;
+            xTorus.name = 'x-indicator';
+            group.add(xTorus);
+            
+            const xArrowsGroup = new THREE.Group();
+            xArrowsGroup.name = 'x-arrows';
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI / 2) + Math.PI / 4;
+                const arrowGeometry = new THREE.ConeGeometry(3, 8, 8);
+                const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+                
+                arrow.position.y = radius * Math.cos(angle);
+                arrow.position.z = radius * Math.sin(angle);
+                
+                arrow.rotation.x = -angle - Math.PI / 2;
+                arrow.rotation.z = Math.PI / 2;
+                
+                xArrowsGroup.add(arrow);
+            }
+            xArrowsGroup.rotation.y = Math.PI / 2;
+            group.add(xArrowsGroup);
+            
+            const yTorusGeometry = new THREE.TorusGeometry(radius, tubeRadius, 8, 64);
+            const yTorusMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x00ff00,
+                transparent: true,
+                opacity: 0.6
+            });
+            const yTorus = new THREE.Mesh(yTorusGeometry, yTorusMaterial);
+            yTorus.rotation.x = Math.PI / 2;
+            yTorus.name = 'y-indicator';
+            group.add(yTorus);
+            
+            const yArrowsGroup = new THREE.Group();
+            yArrowsGroup.name = 'y-arrows';
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI / 2) + Math.PI / 4;
+                const arrowGeometry = new THREE.ConeGeometry(3, 8, 8);
+                const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+                
+                arrow.position.x = radius * Math.cos(angle);
+                arrow.position.z = radius * Math.sin(angle);
+                
+                arrow.rotation.z = -angle - Math.PI / 2;
+                
+                yArrowsGroup.add(arrow);
+            }
+            yArrowsGroup.rotation.x = Math.PI / 2;
+            group.add(yArrowsGroup);
+            
+            const zTorusGeometry = new THREE.TorusGeometry(radius, tubeRadius, 8, 64);
+            const zTorusMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0x0000ff,
+                transparent: true,
+                opacity: 0.6
+            });
+            const zTorus = new THREE.Mesh(zTorusGeometry, zTorusMaterial);
+            zTorus.name = 'z-indicator';
+            group.add(zTorus);
+            
+            const zArrowsGroup = new THREE.Group();
+            zArrowsGroup.name = 'z-arrows';
+            for (let i = 0; i < 4; i++) {
+                const angle = (i * Math.PI / 2) + Math.PI / 4;
+                const arrowGeometry = new THREE.ConeGeometry(3, 8, 8);
+                const arrowMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff });
+                const arrow = new THREE.Mesh(arrowGeometry, arrowMaterial);
+                
+                arrow.position.x = radius * Math.cos(angle);
+                arrow.position.y = radius * Math.sin(angle);
+                
+                arrow.rotation.y = angle + Math.PI / 2;
+                
+                zArrowsGroup.add(arrow);
+            }
+            group.add(zArrowsGroup);
+            
+            group.children.forEach(child => child.visible = false);
+            
+            viewerScene.add(group);
+            rotationIndicators = group;
+            
+            group.traverse((child) => {
+                if (child.isMesh) {
+                    child.castShadow = false;
+                    child.receiveShadow = false;
+                }
+            });
+        }
+        function updateRotationIndicators() {
+            if (!rotationIndicators) return;
+            
+            rotationIndicators.children.forEach(child => child.visible = false);
+            
+            if (viewerControls.selectedAxis) {
+                rotationIndicators.children.forEach(child => {
+                    if (child.name === `${viewerControls.selectedAxis}-indicator` || 
+                        child.name === `${viewerControls.selectedAxis}-arrows`) {
+                        child.visible = true;
+                    }
+                });
+            }
+            
+            viewerRenderer.render(viewerScene, viewerCamera);
+        }
+        function updateViewerCamera() {
+            if (!viewerCamera) return;
+            
+            const baseFrustumSize = 120;
+            const frustumSize = baseFrustumSize / viewerControls.zoom;
+            
+            viewerCamera.left = (frustumSize / -2) + viewerControls.pan.x;
+            viewerCamera.right = (frustumSize / 2) + viewerControls.pan.x;
+            viewerCamera.top = (frustumSize / 2) + viewerControls.pan.y;
+            viewerCamera.bottom = (frustumSize / -2) + viewerControls.pan.y;
+            viewerCamera.updateProjectionMatrix();
+        }
+        function navigateModel(direction) {
+            const newIndex = currentViewerIndex + direction;
+            if (newIndex >= 0 && newIndex < modelData.length) {
+                loadModelInViewer(newIndex);
+            }
+        }
+        function zoomIn() {
+            viewerControls.zoom = Math.min(1000, viewerControls.zoom + 0.2);
+            updateViewerCamera();
+            viewerRenderer.render(viewerScene, viewerCamera);
+        }
+        function zoomOut() {
+            viewerControls.zoom = Math.max(0.5, viewerControls.zoom - 0.2);
+            updateViewerCamera();
+            viewerRenderer.render(viewerScene, viewerCamera);
+        }
+        function resetView() {
+            if (!viewerMesh) return;
+            
+            // Check if auto-rotate is enabled
+            const autoRotateEnabled = document.getElementById('autoRotateCheckbox').checked;
+            
+            if (autoRotateEnabled) {
+                // Reset to 110° Z rotation
+                viewerMesh.rotation.set(0, 0, 110 * Math.PI / 180);
+            } else {
+                // Reset to zero rotation
+                viewerMesh.rotation.set(0, 0, 0);
+            }
+            
+            viewerControls.zoom = 1;
+            viewerControls.pan = { x: 0, y: 0 };
+            
+            createRGBBoundingBox();
+            
+            updateViewerCamera();
+            viewerRenderer.render(viewerScene, viewerCamera);
+        }
+        function screenshotViewer() {
+            if (!viewerRenderer || currentViewerIndex >= modelData.length) return;
+            
+            const model = modelData[currentViewerIndex];
+            
+            // With preserveDrawingBuffer: true, we can immediately capture
+            const originalDataURL = viewerRenderer.domElement.toDataURL('image/jpeg', 0.95);
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 1080;
+            tempCanvas.height = 1080;
+            const ctx = tempCanvas.getContext('2d');
+            
+            const img = new Image();
+            img.onload = () => {
+                // Rotate 90° clockwise to match visual display
+                ctx.save();
+                ctx.translate(540, 540);
+                ctx.rotate(90 * Math.PI / 180);
+                ctx.translate(-540, -540);
+                ctx.drawImage(img, 0, 0);
+                ctx.restore();
+                
+                const rotatedDataURL = tempCanvas.toDataURL('image/jpeg', 0.95);
+                const link = document.createElement('a');
+                link.href = rotatedDataURL;
+                const nameWithoutExt = model.filename.replace(/\.stl$/i, '');
+                link.download = `${nameWithoutExt}_inspection.jpg`;
+                link.click();
+            };
+            img.src = originalDataURL;
+        }
+        
+        document.getElementById('clearBtn').addEventListener('click', clearAll);
+        document.getElementById('downloadAllBtn').addEventListener('click', downloadAllScreenshots);
+        document.getElementById('recheckBtn').addEventListener('click', recheckDuplicates);
+        document.getElementById('autoMarkCheckbox').addEventListener('change', (e) => {
+            autoMarkEnabled = e.target.checked;
+        });
+        
+        setupUpload();
+    </script>
+</body>
+</html>

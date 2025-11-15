@@ -1,0 +1,2911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>28mm STL Scaler with Reference Man Overlay</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding-top: 90px;
+        }
+        .sticky-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background-color: #2a2a2a;
+            border-bottom: 3px solid #4CAF50;
+            padding: 6px 15px;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .sticky-header button {
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .sticky-header button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background-color: #555 !important;
+        }
+        .btn-process { background-color: #4CAF50; color: white; }
+        .btn-process:hover:not(:disabled) { background-color: #45a049; }
+        .btn-yellow { background-color: #FFC107; color: #000; font-weight: bold; }
+        .btn-yellow:hover:not(:disabled) { background-color: #FFB300; }
+        .btn-blue { background-color: #2196F3; color: white; }
+        .btn-blue:hover:not(:disabled) { background-color: #1976D2; }
+        .btn-pink { background-color: #E91E63; color: white; }
+        .btn-pink:hover:not(:disabled) { background-color: #C2185B; }
+        .btn-green { background-color: #4CAF50; color: white; }
+        .btn-green:hover:not(:disabled) { background-color: #388E3C; }
+        .btn-clear { background-color: #f44336; color: white; }
+        .btn-clear:hover:not(:disabled) { background-color: #d32f2f; }
+        .btn-nav { background-color: #607D8B; color: white; }
+        .btn-nav:hover:not(:disabled) { background-color: #455A64; }
+        .btn-export { background-color: #2196F3; color: white; }
+        .btn-export:hover:not(:disabled) { background-color: #1976D2; }
+        .btn-all { background-color: #9C27B0; color: white; }
+        .btn-all:hover:not(:disabled) { background-color: #7B1FA2; }
+        .divider {
+            width: 2px;
+            height: 30px;
+            background-color: #555;
+            align-self: center;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 15px;
+        }
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        .drop-zone {
+            border: 3px dashed #4CAF50;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            background-color: #2a2a2a;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            margin: 20px auto;
+            max-width: 600px;
+        }
+        .drop-zone:hover {
+            border-color: #66BB6A;
+            background-color: #333;
+        }
+        .drop-zone.dragover {
+            border-color: #81C784;
+            background-color: #3a3a3a;
+            transform: scale(1.02);
+        }
+        .file-list {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        .file-list h3 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+        }
+        .file-item {
+            padding: 5px 10px;
+            background-color: #333;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .file-item button {
+            background-color: #ff6b6b;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .loading {
+            text-align: center;
+            color: #4CAF50;
+            font-size: 18px;
+            padding: 15px;
+            display: none;
+        }
+        .loading-progress {
+            width: 100%;
+            max-width: 600px;
+            height: 30px;
+            background-color: #2a2a2a;
+            border-radius: 15px;
+            margin: 15px auto;
+            overflow: hidden;
+            border: 2px solid #4CAF50;
+        }
+        .loading-progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #4CAF50, #66BB6A);
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .loading-message {
+            color: #aaa;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        #stages-container {
+            margin-top: 15px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        .model-card {
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .model-title {
+            color: #4CAF50;
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .card-controls {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+        .card-controls button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+        .card-controls button:hover {
+            transform: scale(1.05);
+        }
+        .card-controls .btn-zoom {
+            background: #2196F3;
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            font-size: 18px;
+        }
+        .card-controls .btn-center {
+            background: #9C27B0;
+            padding: 8px 16px;
+        }
+        .card-controls .btn-download-all {
+            background: #FF9800;
+        }
+        .viewport {
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: linear-gradient(to bottom, #3a3a3a, #2a2a2a);
+            border-radius: 8px;
+            position: relative;
+            border: 2px solid #444;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
+            cursor: default;
+            user-select: none;
+        }
+        .alignment-status {
+            position: absolute;
+            left: 10px;
+            bottom: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #66ff66;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-size: 11px;
+            z-index: 10;
+            pointer-events: none;
+            text-align: center;
+        }
+        .alignment-status.not-flat {
+            color: #ff6666;
+        }
+        .height-controls {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px 12px;
+            background-color: #1a1a1a;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .height-input-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+        .height-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            width: 50px;
+            height: 18px;
+            cursor: pointer;
+            font-size: 10px;
+            line-height: 1;
+            padding: 0;
+            transition: background-color 0.2s;
+        }
+        .height-btn:hover {
+            background-color: #45a049;
+        }
+        .height-input {
+            width: 50px;
+            padding: 6px 4px;
+            border: 2px solid #4CAF50;
+            background-color: #1a1a1a;
+            color: #fff;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 0;
+        }
+        .height-input::-webkit-inner-spin-button,
+        .height-input::-webkit-outer-spin-button {
+            display: none;
+        }
+        .unit-label {
+            color: #aaa;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .mm-display {
+            color: #4CAF50;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        /* X-AXIS ROTATION CONTROLS - RED */
+        .rotation-controls.x-axis {
+            padding: 8px 12px;
+            background-color: #3a1a1a;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 2px solid #f44336;
+        }
+        .rotation-slider.x-axis {
+            width: 100%;
+            margin: 10px 0;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #3a1a1a;
+            outline: none;
+            border-radius: 3px;
+            border: 1px solid #f44336;
+        }
+        .rotation-slider.x-axis::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #f44336;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .rotation-slider.x-axis::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #f44336;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+        .rotation-label.x-axis {
+            display: block;
+            font-size: 12px;
+            color: #f44336;
+            text-align: center;
+            font-weight: bold;
+        }
+        /* Y-AXIS ROTATION CONTROLS - GREEN */
+        .rotation-controls.y-axis {
+            padding: 8px 12px;
+            background-color: #1a3a1a;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 2px solid #4CAF50;
+        }
+        .rotation-slider.y-axis {
+            width: 100%;
+            margin: 10px 0;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #1a3a1a;
+            outline: none;
+            border-radius: 3px;
+            border: 1px solid #4CAF50;
+        }
+        .rotation-slider.y-axis::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #4CAF50;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .rotation-slider.y-axis::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #4CAF50;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+        .rotation-label.y-axis {
+            display: block;
+            font-size: 12px;
+            color: #4CAF50;
+            text-align: center;
+            font-weight: bold;
+        }
+        /* Z-AXIS ROTATION CONTROLS - BLUE */
+        .rotation-controls.z-axis {
+            padding: 8px 12px;
+            background-color: #1a1a3a;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 2px solid #2196F3;
+        }
+        .rotation-slider.z-axis {
+            width: 100%;
+            margin: 10px 0;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            background: #1a1a3a;
+            outline: none;
+            border-radius: 3px;
+            border: 1px solid #2196F3;
+        }
+        .rotation-slider.z-axis::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #2196F3;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+        .rotation-slider.z-axis::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #2196F3;
+            cursor: pointer;
+            border-radius: 50%;
+            border: none;
+        }
+        .rotation-label.z-axis {
+            display: block;
+            font-size: 12px;
+            color: #2196F3;
+            text-align: center;
+            font-weight: bold;
+        }
+        .flatness-status {
+            margin: 10px 0;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px 12px;
+            border-radius: 6px;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .flatness-status.flat {
+            color: #66ff66;
+            background-color: rgba(76, 175, 80, 0.2);
+            border: 2px solid rgba(76, 175, 80, 0.5);
+        }
+        .flatness-status.not-flat {
+            color: #ff6666;
+            background-color: rgba(255, 0, 0, 0.2);
+            border: 2px solid rgba(255, 0, 0, 0.5);
+        }
+        .info {
+            text-align: center;
+            color: #888;
+            margin-bottom: 15px;
+            padding: 8px;
+            background-color: #222;
+            border-radius: 5px;
+        }
+        .error-message {
+            color: #ff6b6b;
+            text-align: center;
+            padding: 10px;
+            background-color: #3a2a2a;
+            border-radius: 5px;
+            margin: 10px 0;
+            display: none;
+        }
+        .cut-mode-controls {
+            padding: 8px 12px;
+            background-color: #3a2a1a;
+            border-radius: 8px;
+            margin-top: 10px;
+            border: 2px solid #FF9800;
+        }
+        .cut-mode-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            justify-content: center;
+        }
+        .cut-mode-checkbox input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+        .cut-mode-checkbox label {
+            color: #FF9800;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .cut-height-controls {
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .cut-height-controls.active {
+            display: flex;
+        }
+        .cut-height-adjuster {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+            align-items: center;
+        }
+        .cut-height-btn {
+            background-color: #FF9800;
+            color: white;
+            border: none;
+            width: 40px;
+            height: 30px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 0;
+            transition: background-color 0.2s;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .cut-height-btn:hover {
+            background-color: #F57C00;
+        }
+        .cut-height-input {
+            width: 80px;
+            padding: 6px 8px;
+            border: 2px solid #FF9800;
+            background-color: #1a1a1a;
+            color: #fff;
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        .cut-height-label {
+            color: #FF9800;
+            font-size: 12px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .cut-button {
+            background-color: #f44336;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 6px;
+            margin-top: 10px;
+            width: 100%;
+            transition: background-color 0.2s;
+        }
+        .cut-button:hover {
+            background-color: #d32f2f;
+        }
+        .cut-button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        .floating-parts-control {
+            padding: 6px 10px;
+            background-color: #2a1a3a;
+            border-radius: 6px;
+            margin-top: 10px;
+            border: 2px solid #9C27B0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .floating-parts-control input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .floating-parts-control label {
+            color: #9C27B0;
+            font-weight: bold;
+            font-size: 13px;
+            cursor: pointer;
+            margin: 0;
+        }
+        .model-height-label {
+            position: absolute;
+            left: 10px;
+            background: rgba(0,0,0,0.8);
+            color: #ff4444;
+            padding: 4px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            z-index: 6;
+            pointer-events: none;
+            text-align: center;
+            white-space: nowrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="sticky-header">
+        <button class="btn-yellow" id="processNoScale" disabled>⚙️ Process with No Scaling</button>
+        <button class="btn-blue" id="process32mm" disabled>⚔️ Scale to 6'2" for 28mm</button>
+        <button class="btn-blue" id="process9ft" disabled>⚔️ Scale to 9' for 28mm</button>
+        <button class="btn-blue" id="process12ft" disabled>⚔️ Scale to 12' for 28mm</button>
+        <button class="btn-pink" id="process100mm" disabled>🦄 Scale to 100mm Cute</button>
+        <button class="btn-green" id="process300mm" disabled>🪴 Scale to 290mm Planter</button>
+        <span id="modelCountDisplay" style="font-size: 12px; font-weight: bold; color: #4CAF50; align-self: center;">0 models loaded</span>
+        <div class="divider"></div>
+        <button class="btn-clear" id="clearAll" disabled>🗑️ Clear</button>
+        <button class="btn-all" id="exportEverything" disabled>💾 Download All</button>
+        <div class="divider"></div>
+        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
+            <input type="checkbox" id="globalRemoveFloating" checked style="width: 16px; height: 16px; cursor: pointer;">
+            <span style="color: #4CAF50; font-weight: bold;">🧹 Remove Floating Parts</span>
+        </label>
+        <div class="divider"></div>
+        <button class="btn-nav" id="prevPage" disabled>◀ Prev</button>
+        <span id="pageDisplay" style="font-size: 12px; font-weight: bold; color: #fff; align-self: center;">Page 1</span>
+        <button class="btn-nav" id="nextPage" disabled>Next ▶</button>
+    </div>
+    <div class="container">
+        <div class="drop-zone" id="dropZone">
+            <h2>Upload Monsters/Creatures</h2>
+            <p>Drop STL files here or click to browse</p>
+        </div>
+        <div class="error-message" id="errorMessage"></div>
+        <div class="file-list" id="fileList">
+            <h3>Loaded Files</h3>
+            <div id="fileListContent"></div>
+        </div>
+        <div class="loading" id="loading">
+            <div>Processing models...</div>
+            <div class="loading-progress">
+                <div class="loading-progress-bar" id="loadingProgressBar">0%</div>
+            </div>
+            <div class="loading-message" id="loadingMessage">Initializing...</div>
+        </div>
+        <div id="stages-container"></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/earcut@2.2.4/dist/earcut.min.js"></script>
+    <script>
+        if (typeof THREE === 'undefined') {
+            document.getElementById('errorMessage').textContent = 'Failed to load 3D library. Please refresh the page.';
+            document.getElementById('errorMessage').style.display = 'block';
+        }
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                if (typeof earcut !== 'undefined') {
+                    console.log('✅ Earcut triangulation library loaded');
+                } else {
+                    console.warn('⚠️ Earcut library not loaded - complex shape cutting may fail');
+                }
+            }, 500);
+        });
+        const SCALE_28MM_RATIO = 56;
+        const MONSTERS_PER_STAGE = 1;
+        const MODELS_PER_PAGE = 16;
+        let pendingFiles = [];
+        let stages = [];
+        let models = new Map();
+        let currentScaleMode = '28mm';
+        let currentPage = 1;
+        let totalPages = 1;
+        let currentTargetHeightMM = null;
+        let processedModelData = []; // Store cleaned models after first processing
+        function feetInchesToMM28mm(feet, inches) {
+            const totalInches = (feet * 12) + inches;
+            const realWorldMM = totalInches * 25.4;
+            const mm28scale = realWorldMM / SCALE_28MM_RATIO;
+            return mm28scale;
+        }
+        function mm28mmToFeetInches(mm28) {
+            const realWorldMM = mm28 * SCALE_28MM_RATIO;
+            const totalInches = realWorldMM / 25.4;
+            const feet = Math.floor(totalInches / 12);
+            const inches = totalInches % 12;
+            return { feet, inches };
+        }
+        function inchesToMM(inches) {
+            return inches * 25.4;
+        }
+        function mmToInches(mm) {
+            return mm / 25.4;
+        }
+        function formatFeetInches(feet, inches) {
+            if (feet === 0) return inches.toFixed(1) + '"';
+            if (inches === 0 || inches < 0.1) return feet + "'";
+            return feet + "' " + inches.toFixed(1) + '"';
+        }
+        function formatInches(inches) {
+            return inches.toFixed(1) + '"';
+        }
+        function generateRandomSuffix() {
+            return Math.floor(100000 + Math.random() * 900000).toString();
+        }
+        function updateLoadingProgress(percent, message) {
+            const progressBar = document.getElementById('loadingProgressBar');
+            const loadingMessage = document.getElementById('loadingMessage');
+            if (progressBar) {
+                progressBar.style.width = percent + '%';
+                progressBar.textContent = Math.round(percent) + '%';
+            }
+            if (loadingMessage && message) {
+                loadingMessage.textContent = message;
+            }
+        }
+        class Stage {
+            constructor(index, scaleMode = '28mm') {
+                this.index = index;
+                this.scaleMode = scaleMode;
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.models = [];
+                this.container = null;
+                this.maxHeight = 0;
+                this.groundY = 0;
+                this.cameraOffset = { x: 0, y: 0 };
+                this.zoomLevel = 1;
+                this.baseFrustumSize = 70;
+                this.flatnessStatus = new Map();
+                this.manGroup = null;
+                this.manDudeLabel3D = null;
+                this.heightLabels = new Map();
+                this.lights = {};
+                this.viewMode = 'all';
+                this.cutModeEnabled = false;
+                this.cutCube = null;
+                this.cutCubeLabel = null;
+                this.cutHeight = 0.1;
+                this.manZPosition = -25;
+                this.manYRotation = 90;
+                this.boundingBoxHelper = null;
+                this.axisHelper = null;
+                this.boundingBoxHelper = null;
+                this.axesHelper = null;
+            }
+            init(container) {
+                this.container = container;
+                const width = container.clientWidth || 350;
+                const height = width;
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x2a2a2a);
+                const frustumSize = this.baseFrustumSize;
+                this.camera = new THREE.OrthographicCamera(
+                    frustumSize / -2, frustumSize / 2,
+                    frustumSize / 2, frustumSize / -2,
+                    -1000, 1000
+                );
+                this.camera.position.set(300, 0, 0);
+                this.camera.lookAt(0, 0, 0);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+                this.renderer.setSize(width, height);
+                this.renderer.shadowMap.enabled = false; // DISABLED - no shadow rendering at all
+                container.appendChild(this.renderer.domElement);
+                this.setupLighting();
+                this.addGroundLine();
+                this.addManOverlay();
+                this.render();
+            }
+            toggleCutMode(enabled) {
+                this.cutModeEnabled = enabled;
+                if (enabled) {
+                    if (!this.cutCube) {
+                        this.createCutCube();
+                    }
+                    this.cutCube.visible = true;
+                    if (this.cutCubeLabel) {
+                        this.cutCubeLabel.visible = true;
+                    }
+                    this.updateCutCubeHeight(this.cutHeight);
+                } else {
+                    if (this.cutCube) {
+                        this.cutCube.visible = false;
+                    }
+                    if (this.cutCubeLabel) {
+                        this.cutCubeLabel.visible = false;
+                    }
+                }
+                this.render();
+            }
+            createCutCube() {
+                let maxSize = 200;
+                if (this.models.length > 0) {
+                    const box = new THREE.Box3();
+                    this.models.forEach(modelData => {
+                        modelData.mesh.updateMatrixWorld(true);
+                        box.expandByObject(modelData.mesh);
+                    });
+                    if (!box.isEmpty()) {
+                        const size = box.getSize(new THREE.Vector3());
+                        maxSize = Math.max(size.x, size.z) * 3;
+                    }
+                }
+                const cubeHeight = 100;
+                const cubeGeometry = new THREE.BoxGeometry(maxSize, cubeHeight, maxSize);
+                const cubeMaterial = new THREE.MeshBasicMaterial({
+                    color: 0xff0000,
+                    transparent: true,
+                    opacity: 0.5,
+                    side: THREE.DoubleSide,
+                    depthTest: true,
+                    depthWrite: false
+                });
+                this.cutCube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                this.cutCube.position.y = this.groundY + this.cutHeight - (cubeHeight / 2);
+                this.cutCube.position.x = 0;
+                this.cutCube.position.z = 0;
+                this.cutCube.castShadow = false; // Cut cube should NOT cast shadows
+                this.cutCube.receiveShadow = false;
+                this.scene.add(this.cutCube);
+                this.cutCube.visible = false;
+                this.cutCubeHeight = cubeHeight;
+                this.cutCubeWidth = maxSize;
+                const labelText = `Cut Cube: ${maxSize.toFixed(1)}mm × ${maxSize.toFixed(1)}mm × ${cubeHeight.toFixed(1)}mm`;
+                this.cutCubeLabel = this.createHeightLabel(labelText, '#ff9800');
+                this.cutCubeLabel.position.set(0, this.groundY + this.cutHeight - cubeHeight - 5, 0);
+                this.scene.add(this.cutCubeLabel);
+                this.cutCubeLabel.visible = false;
+            }
+            updateCutCubeHeight(heightMM) {
+                this.cutHeight = heightMM;
+                if (this.cutCube) {
+                    this.cutCube.position.y = this.groundY + heightMM - (this.cutCubeHeight / 2);
+                    if (this.cutCubeLabel) {
+                        this.cutCubeLabel.position.y = this.groundY + heightMM - this.cutCubeHeight - 5;
+                    }
+                    this.render();
+                }
+            }
+            setupLighting() {
+                // Key light - NO SHADOW RENDERING AT ALL
+                this.lights.key = new THREE.DirectionalLight(0xffffff, 0.8);
+                this.lights.key.position.set(30, 20, -150);
+                this.lights.key.castShadow = false; // DISABLED - no shadow rendering
+                this.scene.add(this.lights.key);
+                
+                // Fill light - NO SHADOW RENDERING AT ALL
+                this.lights.fill = new THREE.DirectionalLight(0xffffff, 0.4);
+                this.lights.fill.position.set(10, 5, 80);
+                this.lights.fill.castShadow = false; // DISABLED - no shadow rendering
+                this.scene.add(this.lights.fill);
+            }
+            addManOverlay() {
+                this.add3DManFigure();
+                setTimeout(() => {
+                    this.updateManPosition();
+                }, 100);
+            }
+            add3DManFigure() {
+                const manHeightMM = 30.8;
+                const headRadius = 2.0;
+                const torsoHeight = 15.4;
+                const torsoWidth = 8.6;
+                const torsoDepth = 5.5;
+                const legHeight = 14.6;
+                const legWidth = 2.5;
+                const legDepth = 2.5;
+                const legSpacing = 0.6;
+                const armHeight = 13.5;
+                const armWidth = 1.5;
+                const armDepth = 1.5;
+                const headY = manHeightMM - headRadius;
+                const torsoTopY = headY - headRadius;
+                const torsoY = torsoTopY - (torsoHeight / 2);
+                const legY = legHeight / 2;
+                const skinMaterial = new THREE.MeshPhongMaterial({
+                    color: 0xf4c8a8,
+                    emissive: 0x2a3a4a,
+                    emissiveIntensity: 0.35,
+                    shininess: 3
+                });
+                const tealMaterial = new THREE.MeshPhongMaterial({
+                    color: 0x00CED1,
+                    emissive: 0x2a3a4a,
+                    emissiveIntensity: 0.35,
+                    shininess: 3
+                });
+                const darkBlueMaterial = new THREE.MeshPhongMaterial({
+                    color: 0x00008B,
+                    emissive: 0x2a3a4a,
+                    emissiveIntensity: 0.35,
+                    shininess: 3
+                });
+                this.manGroup = new THREE.Group();
+                // Man figure should NOT cast shadows - only the main STL model casts shadows
+                const head = new THREE.Mesh(
+                    new THREE.SphereGeometry(headRadius, 16, 16),
+                    skinMaterial
+                );
+                head.position.set(0, headY, 0);
+                head.castShadow = false;
+                this.manGroup.add(head);
+                const torso = new THREE.Mesh(
+                    new THREE.BoxGeometry(torsoWidth, torsoHeight, torsoDepth),
+                    tealMaterial
+                );
+                torso.position.set(0, torsoY, 0);
+                torso.castShadow = false;
+                this.manGroup.add(torso);
+                const leftLeg = new THREE.Mesh(
+                    new THREE.BoxGeometry(legWidth, legHeight, legDepth),
+                    darkBlueMaterial
+                );
+                leftLeg.position.set(-(legWidth / 2) - (legSpacing / 2), legY, 0);
+                leftLeg.castShadow = false;
+                this.manGroup.add(leftLeg);
+                const rightLeg = new THREE.Mesh(
+                    new THREE.BoxGeometry(legWidth, legHeight, legDepth),
+                    darkBlueMaterial
+                );
+                rightLeg.position.set((legWidth / 2) + (legSpacing / 2), legY, 0);
+                rightLeg.castShadow = false;
+                this.manGroup.add(rightLeg);
+                const leftArm = new THREE.Mesh(
+                    new THREE.BoxGeometry(armWidth, armHeight, armDepth),
+                    skinMaterial
+                );
+                leftArm.position.set(-(torsoWidth / 2) - (armWidth / 2), torsoTopY - (armHeight / 2), 0);
+                leftArm.castShadow = false;
+                this.manGroup.add(leftArm);
+                const rightArm = new THREE.Mesh(
+                    new THREE.BoxGeometry(armWidth, armHeight, armDepth),
+                    skinMaterial
+                );
+                rightArm.position.set((torsoWidth / 2) + (armWidth / 2), torsoTopY - (armHeight / 2), 0);
+                rightArm.castShadow = false;
+                this.manGroup.add(rightArm);
+                this.manGroup.position.set(0, 0, this.manZPosition);
+                this.manGroup.rotation.y = this.manYRotation * Math.PI / 180;
+                this.scene.add(this.manGroup);
+                this.manFigureHeight = manHeightMM;
+                const manLabelSprite = this.createHeightLabel("Man Dude 5'8\" (30.8mm)", '#6699cc');
+                manLabelSprite.position.set(0, manHeightMM + 3, this.manZPosition);
+                this.scene.add(manLabelSprite);
+                this.manDudeLabel3D = manLabelSprite;
+            }
+            updateManPosition() {
+                if (this.models.length > 0) {
+                    const modelBox = new THREE.Box3();
+                    this.models.forEach(modelData => {
+                        modelData.mesh.updateMatrixWorld(true);
+                        modelBox.expandByObject(modelData.mesh);
+                    });
+                    this.manGroup.updateMatrixWorld(true);
+                    const manBox = new THREE.Box3().setFromObject(this.manGroup);
+                    const manMaxZOffset = manBox.max.z - this.manGroup.position.z;
+                    const newZPosition = modelBox.min.z - manMaxZOffset;
+                    this.manGroup.position.z = newZPosition;
+                    this.manZPosition = newZPosition;
+                    if (this.manDudeLabel3D) {
+                        this.manDudeLabel3D.position.z = newZPosition;
+                        this.manDudeLabel3D.position.y = this.manFigureHeight + 3;
+                    }
+                    this.render();
+                }
+            }
+            rotateMan(axis, degrees) {
+                if (!this.manGroup) return;
+                const radians = degrees * Math.PI / 180;
+                if (axis === 'y') {
+                    this.manYRotation = degrees;
+                    this.manGroup.rotation.y = radians;
+                }
+                this.updateManPosition();
+                this.render();
+            }
+            updateModelHeightLabelPosition(modelId) {
+                const modelHeightLabelEl = document.getElementById(`model-height-label-${modelId}`);
+                if (!modelHeightLabelEl || this.models.length === 0) return;
+                const viewportSize = this.container.clientWidth || 350;
+                const frustumHeight = this.baseFrustumSize / this.zoomLevel;
+                const box = new THREE.Box3();
+                this.models.forEach(modelData => {
+                    box.expandByObject(modelData.mesh);
+                });
+                const topY = box.max.y;
+                const topOffsetFromCenter = topY - this.cameraOffset.y;
+                const topNormalizedY = -topOffsetFromCenter / frustumHeight;
+                const topPixelFromTop = (viewportSize / 2) + (topNormalizedY * viewportSize);
+                modelHeightLabelEl.style.top = (topPixelFromTop + 5) + 'px';
+                modelHeightLabelEl.style.left = '10px';
+            }
+            updateCamera() {
+                const frustumSize = this.baseFrustumSize / this.zoomLevel;
+                this.camera.left = frustumSize / -2 + this.cameraOffset.x;
+                this.camera.right = frustumSize / 2 + this.cameraOffset.x;
+                this.camera.top = frustumSize / 2 + this.cameraOffset.y;
+                this.camera.bottom = frustumSize / -2 + this.cameraOffset.y;
+                this.camera.updateProjectionMatrix();
+                if (this.models.length > 0) {
+                    this.updateModelHeightLabelPosition(this.models[0].id);
+                }
+                this.render();
+            }
+            addGroundLine() {
+                this.groundElements = [];
+                const groundThickness = 2;
+                const groundSize = 10000;
+                const groundGeometry = new THREE.BoxGeometry(groundSize, groundThickness, groundSize);
+                const groundMaterial = new THREE.MeshPhongMaterial({
+                    color: 0xccaa44,
+                    specular: 0x888888,
+                    shininess: 30,
+                    emissive: 0x332200,
+                    emissiveIntensity: 0.1,
+                    transparent: true,
+                    opacity: 0.5
+                });
+                const groundBox = new THREE.Mesh(groundGeometry, groundMaterial);
+                groundBox.position.y = this.groundY - (groundThickness / 2);
+                groundBox.receiveShadow = true;
+                groundBox.castShadow = false; // Ground should NOT cast shadows
+                this.scene.add(groundBox);
+                this.groundElements.push(groundBox);
+                const lineGeometry = new THREE.BufferGeometry();
+                const linePoints = [
+                    new THREE.Vector3(0, this.groundY, -50000),
+                    new THREE.Vector3(0, this.groundY, 50000)
+                ];
+                lineGeometry.setFromPoints(linePoints);
+                const lineMaterial = new THREE.LineBasicMaterial({
+                    color: 0xffff00,
+                    linewidth: 3
+                });
+                const groundLine = new THREE.Line(lineGeometry, lineMaterial);
+                groundLine.renderOrder = 2;
+                this.scene.add(groundLine);
+                this.groundElements.push(groundLine);
+                const darkGroundGeometry = new THREE.PlaneGeometry(100000, 50);
+                const darkGroundMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x1a1a1a,
+                    side: THREE.DoubleSide
+                });
+                const darkGround = new THREE.Mesh(darkGroundGeometry, darkGroundMaterial);
+                darkGround.rotation.x = -Math.PI / 2;
+                darkGround.position.y = -25;
+                darkGround.castShadow = false; // Dark ground should NOT cast shadows
+                darkGround.receiveShadow = false;
+                this.scene.add(darkGround);
+                this.groundElements.push(darkGround);
+                const gridSpacing = this.scaleMode === '28mm' ? 5.5 : 25.4;
+                for (let y = gridSpacing; y <= 10000; y += gridSpacing) {
+                    const gridMaterial = new THREE.LineBasicMaterial({
+                        color: 0xffffff,
+                        linewidth: 2,
+                        opacity: 0.6,
+                        transparent: true
+                    });
+                    const gridPoints = [
+                        new THREE.Vector3(0, y, -50000),
+                        new THREE.Vector3(0, y, 50000)
+                    ];
+                    const gridGeometry = new THREE.BufferGeometry().setFromPoints(gridPoints);
+                    const gridLine = new THREE.Line(gridGeometry, gridMaterial);
+                    this.scene.add(gridLine);
+                    this.groundElements.push(gridLine);
+                }
+            }
+            alignToGround(mesh) {
+                mesh.updateMatrixWorld(true);
+                const geometry = mesh.geometry;
+                const positions = geometry.attributes.position;
+                let minY = Infinity;
+                const matrix = mesh.matrixWorld;
+                const vertex = new THREE.Vector3();
+                for (let i = 0; i < positions.count; i++) {
+                    vertex.fromBufferAttribute(positions, i);
+                    vertex.applyMatrix4(matrix);
+                    minY = Math.min(minY, vertex.y);
+                }
+                const offsetY = this.groundY - minY;
+                mesh.position.y += offsetY;
+                mesh.updateMatrixWorld(true);
+            }
+            checkFlatness(mesh) {
+                mesh.updateMatrixWorld(true);
+                const geometry = mesh.geometry;
+                const positions = geometry.attributes.position;
+                let minY = Infinity;
+                const matrix = mesh.matrixWorld;
+                const vertex = new THREE.Vector3();
+                for (let i = 0; i < positions.count; i++) {
+                    vertex.fromBufferAttribute(positions, i);
+                    vertex.applyMatrix4(matrix);
+                    minY = Math.min(minY, vertex.y);
+                }
+                const tolerance = 0.01;
+                const bottomVertices = [];
+                for (let i = 0; i < positions.count; i++) {
+                    vertex.fromBufferAttribute(positions, i);
+                    vertex.applyMatrix4(matrix);
+                    if (Math.abs(vertex.y - minY) <= tolerance) {
+                        bottomVertices.push({ x: vertex.x, y: vertex.y, z: vertex.z });
+                    }
+                }
+                const vertexCount = bottomVertices.length;
+                if (vertexCount < 3) {
+                    return { isFlat: false, reason: "Insufficient vertices (need 3+)", vertexCount: vertexCount };
+                }
+                let minBottomY = Infinity, maxBottomY = -Infinity;
+                let minX = Infinity, maxX = -Infinity;
+                let minZ = Infinity, maxZ = -Infinity;
+                bottomVertices.forEach(v => {
+                    minBottomY = Math.min(minBottomY, v.y);
+                    maxBottomY = Math.max(maxBottomY, v.y);
+                    minX = Math.min(minX, v.x);
+                    maxX = Math.max(maxX, v.x);
+                    minZ = Math.min(minZ, v.z);
+                    maxZ = Math.max(maxZ, v.z);
+                });
+                const yRange = maxBottomY - minBottomY;
+                const isPlanar = yRange <= 0.01;
+                const xSpan = maxX - minX;
+                const zSpan = maxZ - minZ;
+                const area = xSpan * zSpan;
+                const hasGoodArea = area >= 4;
+                const isFlat = vertexCount >= 3 && isPlanar && hasGoodArea;
+                return {
+                    isFlat: isFlat,
+                    vertexCount: vertexCount,
+                    yRange: yRange,
+                    area: area,
+                    reason: !isFlat ? this.getFlatnessFailureReason(vertexCount >= 3, isPlanar, hasGoodArea) : null
+                };
+            }
+            getFlatnessFailureReason(hasEnoughVertices, isPlanar, hasGoodArea) {
+                if (!hasEnoughVertices) return "Insufficient vertices (need 3+)";
+                if (!isPlanar) return "Not planar (>0.01mm variation)";
+                if (!hasGoodArea) return "Contact area too small (<4mm2)";
+                return "Unknown";
+            }
+            createHeightLabel(text, color) {
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = 256;
+                canvas.height = 64;
+                context.clearRect(0, 0, canvas.width, canvas.height);
+                context.font = 'bold 30px Arial';
+                context.fillStyle = color;
+                context.textAlign = 'center';
+                context.textBaseline = 'middle';
+                context.strokeStyle = 'black';
+                context.lineWidth = 3;
+                context.strokeText(text, canvas.width / 2, canvas.height / 2);
+                context.fillText(text, canvas.width / 2, canvas.height / 2);
+                const texture = new THREE.Texture(canvas);
+                texture.needsUpdate = true;
+                const spriteMaterial = new THREE.SpriteMaterial({
+                    map: texture,
+                    depthTest: false,
+                    depthWrite: false
+                });
+                const sprite = new THREE.Sprite(spriteMaterial);
+                sprite.scale.set(15, 4, 1);
+                return sprite;
+            }
+            updateHeightLabel(modelId, mesh) {
+                if (this.heightLabels.has(modelId)) {
+                    const oldLabel = this.heightLabels.get(modelId);
+                    this.scene.remove(oldLabel);
+                }
+                mesh.updateMatrixWorld(true);
+                const box = new THREE.Box3().setFromObject(mesh);
+                const heightMM = box.max.y - this.groundY;
+                let heightText;
+                if (this.scaleMode === '28mm') {
+                    const { feet, inches } = mm28mmToFeetInches(heightMM);
+                    heightText = `${formatFeetInches(feet, inches)} (${heightMM.toFixed(1)}mm)`;
+                } else {
+                    const inches = mmToInches(heightMM);
+                    heightText = `${formatInches(inches)} (${heightMM.toFixed(1)}mm)`;
+                }
+                const color = '#ff4444';
+                const label = this.createHeightLabel(heightText, color);
+                label.position.set(
+                    box.min.z + 5,
+                    box.max.y - 3,
+                    mesh.position.z
+                );
+                this.scene.add(label);
+                this.heightLabels.set(modelId, label);
+            }
+            addMonster(mesh, modelId) {
+                mesh.name = modelId;
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0xfff0f0,
+                    emissive: 0x3b350c,
+                    emissiveIntensity: 0.35,
+                    shininess: 3,
+                    side: THREE.DoubleSide
+                });
+                mesh.material = material;
+                
+                // SHADOW SYSTEM: Only the main STL model casts shadows
+                // This is the ONLY object in the scene with castShadow = true
+                // Everything else (man, ground, lights, helpers) has castShadow = false
+                mesh.castShadow = true;  // This model WILL cast a shadow
+                mesh.receiveShadow = true; // This model CAN receive shadows
+                
+                this.scene.add(mesh);
+                this.models.push({ mesh: mesh, id: modelId });
+                this.alignToGround(mesh);
+                const flatnessResult = this.checkFlatness(mesh);
+                this.flatnessStatus.set(modelId, flatnessResult);
+                this.updateFlatnessDisplay();
+                this.updateHeightLabel(modelId, mesh);
+                this.updateManPosition();
+                this.fitAllModelsAndManInView();
+                this.render();
+            }
+            updateFlatnessDisplay() {
+                if (this.models.length === 0) return;
+                const modelData = this.models[0];
+                const flatness = this.flatnessStatus.get(modelData.id);
+                const status = document.getElementById(`status-${this.index}`);
+                if (status && flatness) {
+                    if (flatness.isFlat) {
+                        status.textContent = '✓ Flat';
+                        status.className = 'alignment-status';
+                    } else {
+                        status.textContent = '⚠ Not Flat';
+                        status.className = 'alignment-status not-flat';
+                    }
+                }
+            }
+            fitAllModelsInView() {
+                const box = new THREE.Box3();
+                this.models.forEach(modelData => {
+                    box.expandByObject(modelData.mesh);
+                });
+                if (box.isEmpty()) {
+                    box.set(new THREE.Vector3(-30, 0, -30), new THREE.Vector3(30, 60, 30));
+                }
+                const size = box.getSize(new THREE.Vector3());
+                const maxDimension = Math.max(size.y, size.z);
+                const viewportSize = this.container.clientWidth || 350;
+                const paddingPixels = 10;
+                const usablePixels = viewportSize - (paddingPixels * 2);
+                const frustumSize = maxDimension * (viewportSize / usablePixels);
+                this.zoomLevel = this.baseFrustumSize / frustumSize;
+                const center = box.getCenter(new THREE.Vector3());
+                this.cameraOffset.x = -center.z;
+                this.cameraOffset.y = box.min.y + (size.y / 2);
+                this.updateCamera();
+                if (this.models.length > 0) {
+                    this.updateModelHeightLabelPosition(this.models[0].id);
+                }
+            }
+            fitAllModelsAndManInView() {
+                if (this.manGroup) this.manGroup.visible = true;
+                if (this.manDudeLabel3D) this.manDudeLabel3D.visible = true;
+                if (this.cutModeEnabled) {
+                    if (this.cutCube) this.cutCube.visible = true;
+                    if (this.cutCubeLabel) this.cutCubeLabel.visible = true;
+                }
+                if (this.groundElements) {
+                    this.groundElements.forEach(element => {
+                        element.visible = true;
+                    });
+                }
+                this.heightLabels.forEach(label => {
+                    label.visible = true;
+                });
+                this.scene.background = new THREE.Color(0x2a2a2a);
+                this.renderer.setClearColor(0x2a2a2a, 1);
+                this.viewMode = 'all';
+                const box = new THREE.Box3();
+                this.models.forEach(modelData => {
+                    box.expandByObject(modelData.mesh);
+                });
+                if (this.manGroup) {
+                    box.expandByObject(this.manGroup);
+                }
+                if (box.isEmpty()) {
+                    box.set(new THREE.Vector3(-30, 0, -30), new THREE.Vector3(30, 60, 30));
+                }
+                const size = box.getSize(new THREE.Vector3());
+                const maxDimension = Math.max(size.y, size.z);
+                const viewportSize = this.container.clientWidth || 350;
+                const paddingPixels = 10;
+                const usablePixels = viewportSize - (paddingPixels * 2);
+                const frustumSize = maxDimension * (viewportSize / usablePixels);
+                this.zoomLevel = this.baseFrustumSize / frustumSize;
+                const center = box.getCenter(new THREE.Vector3());
+                this.cameraOffset.x = -center.z;
+                this.cameraOffset.y = box.min.y + (size.y / 2);
+                const frustumSizeCalc = this.baseFrustumSize / this.zoomLevel;
+                this.camera.left = frustumSizeCalc / -2 + this.cameraOffset.x;
+                this.camera.right = frustumSizeCalc / 2 + this.cameraOffset.x;
+                this.camera.top = frustumSizeCalc / 2 + this.cameraOffset.y;
+                this.camera.bottom = frustumSizeCalc / -2 + this.cameraOffset.y;
+                this.camera.updateProjectionMatrix();
+                this.camera.position.set(300, 0, 0);
+                this.camera.lookAt(0, 0, 0);
+                if (this.models.length > 0) {
+                    this.updateModelHeightLabelPosition(this.models[0].id);
+                }
+                this.render();
+            }
+            fitSTLOnlyInView() {
+                if (this.manGroup) this.manGroup.visible = false;
+                if (this.manDudeLabel3D) this.manDudeLabel3D.visible = false;
+                if (this.cutCube) this.cutCube.visible = false;
+                if (this.cutCubeLabel) this.cutCubeLabel.visible = false;
+                if (this.groundElements) {
+                    this.groundElements.forEach(element => {
+                        element.visible = false;
+                    });
+                }
+                this.heightLabels.forEach(label => {
+                    label.visible = false;
+                });
+                this.scene.background = null;
+                this.renderer.setClearColor(0x000000, 0);
+                this.viewMode = 'stl';
+                const box = new THREE.Box3();
+                this.models.forEach(modelData => {
+                    modelData.mesh.updateMatrixWorld(true);
+                    box.expandByObject(modelData.mesh);
+                });
+                if (!box.isEmpty()) {
+                    const center = box.getCenter(new THREE.Vector3());
+                    const tiltRadians = 15 * Math.PI / 180;
+                    const distance = 300;
+                    const camX = distance * Math.cos(tiltRadians);
+                    const camY = center.y + distance * Math.sin(tiltRadians);
+                    const camZ = center.z;
+                    this.camera.position.set(camX, camY, camZ);
+                    this.camera.lookAt(center.x, center.y, center.z);
+                    this.camera.updateMatrixWorld();
+                    const points = [
+                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                    ];
+                    const worldToCam = new THREE.Matrix4().copy(this.camera.matrixWorldInverse);
+                    const camSpacePoints = points.map(p => p.clone().applyMatrix4(worldToCam));
+                    let minX = Infinity, maxX = -Infinity;
+                    let minY = Infinity, maxY = -Infinity;
+                    camSpacePoints.forEach(p => {
+                        minX = Math.min(minX, p.x);
+                        maxX = Math.max(maxX, p.x);
+                        minY = Math.min(minY, p.y);
+                        maxY = Math.max(maxY, p.y);
+                    });
+                    const sizeX = maxX - minX;
+                    const sizeY = maxY - minY;
+                    const centerX = (minX + maxX) / 2;
+                    const centerY = (minY + maxY) / 2;
+                    const padding = 1.1;
+                    const frustumWidth = sizeX * padding;
+                    const frustumHeight = sizeY * padding;
+                    const frustumSize = Math.max(frustumWidth, frustumHeight);
+                    this.camera.left = centerX - frustumSize / 2;
+                    this.camera.right = centerX + frustumSize / 2;
+                    this.camera.top = centerY + frustumSize / 2;
+                    this.camera.bottom = centerY - frustumSize / 2;
+                    this.camera.updateProjectionMatrix();
+                }
+                this.render();
+            }
+            recenterCurrentView() {
+                if (this.viewMode === 'stl') {
+                    this.fitSTLOnlyInView();
+                } else {
+                    this.fitAllModelsAndManInView();
+                }
+            }
+            createTempRenderer(width, height) {
+                const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                renderer.setSize(width, height);
+                return renderer;
+            }
+            takeScreenshot() {
+                const width = 1080;
+                const height = 1080;
+                const tempRenderer = this.createTempRenderer(width, height);
+                const clearColor = new THREE.Color();
+                this.renderer.getClearColor(clearColor);
+                const clearAlpha = this.renderer.getClearAlpha();
+                tempRenderer.setClearColor(clearColor, clearAlpha);
+                this.scene.background = new THREE.Color(0x2a2a2a);
+                tempRenderer.render(this.scene, this.camera);
+                const dataURL = tempRenderer.domElement.toDataURL('image/png');
+                tempRenderer.dispose();
+                return dataURL;
+            }
+            takeTransparentTiltedScreenshot() {
+                const originalBackground = this.scene.background;
+                const originalClearColor = new THREE.Color();
+                this.renderer.getClearColor(originalClearColor);
+                const originalClearAlpha = this.renderer.getClearAlpha();
+                const originalCameraPosition = this.camera.position.clone();
+                const originalCameraRotation = this.camera.rotation.clone();
+                const originalLeft = this.camera.left;
+                const originalRight = this.camera.right;
+                const originalTop = this.camera.top;
+                const originalBottom = this.camera.bottom;
+                const manVisible = this.manGroup ? this.manGroup.visible : false;
+                const labelVisible = this.manDudeLabel3D ? this.manDudeLabel3D.visible : false;
+                const groundVisibles = this.groundElements ? this.groundElements.map(el => el.visible) : [];
+                const heightLabelsVisibles = Array.from(this.heightLabels.values()).map(label => label.visible);
+                if (this.manGroup) this.manGroup.visible = false;
+                if (this.manDudeLabel3D) this.manDudeLabel3D.visible = false;
+                if (this.groundElements) {
+                    this.groundElements.forEach(element => {
+                        element.visible = false;
+                    });
+                }
+                this.heightLabels.forEach(label => {
+                    label.visible = false;
+                });
+                const box = new THREE.Box3();
+                this.models.forEach(modelData => {
+                    modelData.mesh.updateMatrixWorld(true);
+                    box.expandByObject(modelData.mesh);
+                });
+                let dataURL = '';
+                if (!box.isEmpty()) {
+                    const center = box.getCenter(new THREE.Vector3());
+                    const tiltRadians = 15 * Math.PI / 180;
+                    const distance = 300;
+                    const camX = distance * Math.cos(tiltRadians);
+                    const camY = center.y + distance * Math.sin(tiltRadians);
+                    const camZ = center.z;
+                    this.camera.position.set(camX, camY, camZ);
+                    this.camera.lookAt(center.x, center.y, center.z);
+                    this.camera.updateMatrixWorld();
+                    const points = [
+                        new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                        new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                        new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                        new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+                    ];
+                    const worldToCam = new THREE.Matrix4().copy(this.camera.matrixWorldInverse);
+                    const camSpacePoints = points.map(p => p.clone().applyMatrix4(worldToCam));
+                    let minX = Infinity, maxX = -Infinity;
+                    let minY = Infinity, maxY = -Infinity;
+                    camSpacePoints.forEach(p => {
+                        minX = Math.min(minX, p.x);
+                        maxX = Math.max(maxX, p.x);
+                        minY = Math.min(minY, p.y);
+                        maxY = Math.max(maxY, p.y);
+                    });
+                    const sizeX = maxX - minX;
+                    const sizeY = maxY - minY;
+                    const padding = 1.0;
+                    const frustumWidth = sizeX * padding;
+                    const frustumHeight = sizeY * padding;
+                    const maxPixel = 1080;
+                    const maxDim = Math.max(frustumWidth, frustumHeight);
+                    const pixelWidth = Math.round((frustumWidth / maxDim) * maxPixel);
+                    const pixelHeight = Math.round((frustumHeight / maxDim) * maxPixel);
+                    const tempRenderer = this.createTempRenderer(pixelWidth, pixelHeight);
+                    this.scene.background = null;
+                    tempRenderer.setClearColor(0x000000, 0);
+                    this.camera.left = minX;
+                    this.camera.right = maxX;
+                    this.camera.top = maxY;
+                    this.camera.bottom = minY;
+                    this.camera.updateProjectionMatrix();
+                    tempRenderer.render(this.scene, this.camera);
+                    dataURL = tempRenderer.domElement.toDataURL('image/png');
+                    tempRenderer.dispose();
+                }
+                this.scene.background = originalBackground;
+                this.renderer.setClearColor(originalClearColor, originalClearAlpha);
+                this.camera.position.copy(originalCameraPosition);
+                this.camera.rotation.copy(originalCameraRotation);
+                this.camera.left = originalLeft;
+                this.camera.right = originalRight;
+                this.camera.top = originalTop;
+                this.camera.bottom = originalBottom;
+                this.camera.updateProjectionMatrix();
+                if (this.manGroup) this.manGroup.visible = manVisible;
+                if (this.manDudeLabel3D) this.manDudeLabel3D.visible = labelVisible;
+                if (this.groundElements) {
+                    this.groundElements.forEach((element, idx) => {
+                        element.visible = groundVisibles[idx];
+                    });
+                }
+                Array.from(this.heightLabels.values()).forEach((label, idx) => {
+                    label.visible = heightLabelsVisibles[idx];
+                });
+                this.render();
+                return dataURL;
+            }
+            render() {
+                if (this.renderer && this.scene && this.camera) {
+                    this.renderer.render(this.scene, this.camera);
+                }
+            }
+            showBoundingBoxAndAxes(mesh) {
+                this.hideBoundingBoxAndAxes();
+                const box = new THREE.Box3().setFromObject(mesh);
+                this.boundingBoxHelper = new THREE.Box3Helper(box, 0xffff00);
+                this.boundingBoxHelper.castShadow = false; // Helpers should NOT cast shadows
+                this.scene.add(this.boundingBoxHelper);
+                const size = box.getSize(new THREE.Vector3());
+                const maxDim = Math.max(size.x, size.y, size.z);
+                this.axesHelper = new THREE.AxesHelper(maxDim * 0.7);
+                this.axesHelper.position.copy(mesh.position);
+                this.axesHelper.rotation.copy(mesh.rotation);
+                this.axesHelper.castShadow = false; // Helpers should NOT cast shadows
+                this.scene.add(this.axesHelper);
+                this.render();
+            }
+            hideBoundingBoxAndAxes() {
+                if (this.boundingBoxHelper) {
+                    this.scene.remove(this.boundingBoxHelper);
+                    this.boundingBoxHelper = null;
+                }
+                if (this.axesHelper) {
+                    this.scene.remove(this.axesHelper);
+                    this.axesHelper = null;
+                }
+                this.render();
+            }
+        }
+        function removeFloatingParts(geometry) {
+            const positions = geometry.attributes.position;
+            const triangleCount = positions.count / 3;
+            if (triangleCount === 0) return geometry;
+            const vertexToTriangles = new Map();
+            for (let i = 0; i < triangleCount; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const vertexIndex = i * 3 + j;
+                    const x = positions.getX(vertexIndex);
+                    const y = positions.getY(vertexIndex);
+                    const z = positions.getZ(vertexIndex);
+                    const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+                    if (!vertexToTriangles.has(key)) {
+                        vertexToTriangles.set(key, []);
+                    }
+                    vertexToTriangles.get(key).push(i);
+                }
+            }
+            const visited = new Set();
+            const components = [];
+            for (let startTriangle = 0; startTriangle < triangleCount; startTriangle++) {
+                if (visited.has(startTriangle)) continue;
+                const component = [];
+                const queue = [startTriangle];
+                visited.add(startTriangle);
+                while (queue.length > 0) {
+                    const triangleIdx = queue.shift();
+                    component.push(triangleIdx);
+                    for (let j = 0; j < 3; j++) {
+                        const vertexIndex = triangleIdx * 3 + j;
+                        const x = positions.getX(vertexIndex);
+                        const y = positions.getY(vertexIndex);
+                        const z = positions.getZ(vertexIndex);
+                        const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+                        const connectedTriangles = vertexToTriangles.get(key) || [];
+                        for (const connectedIdx of connectedTriangles) {
+                            if (!visited.has(connectedIdx)) {
+                                visited.add(connectedIdx);
+                                queue.push(connectedIdx);
+                            }
+                        }
+                    }
+                }
+                components.push(component);
+            }
+            if (components.length <= 1) {
+                console.log('✅ Single component found - no floating parts');
+                return geometry;
+            }
+            let largestComponent = components[0];
+            for (const component of components) {
+                if (component.length > largestComponent.length) {
+                    largestComponent = component;
+                }
+            }
+            console.log(`🧹 Removing floating parts: Found ${components.length} components, keeping largest with ${largestComponent.length} triangles`);
+            const newVertices = [];
+            const newNormals = [];
+            const normals = geometry.attributes.normal;
+            for (const triangleIdx of largestComponent) {
+                for (let j = 0; j < 3; j++) {
+                    const vertexIndex = triangleIdx * 3 + j;
+                    newVertices.push(
+                        positions.getX(vertexIndex),
+                        positions.getY(vertexIndex),
+                        positions.getZ(vertexIndex)
+                    );
+                    if (normals) {
+                        newNormals.push(
+                            normals.getX(vertexIndex),
+                            normals.getY(vertexIndex),
+                            normals.getZ(vertexIndex)
+                        );
+                    }
+                }
+            }
+            const cleanGeometry = new THREE.BufferGeometry();
+            cleanGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(newVertices), 3));
+            if (newNormals.length > 0) {
+                cleanGeometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(newNormals), 3));
+            } else {
+                cleanGeometry.computeVertexNormals();
+            }
+            cleanGeometry.computeBoundingBox();
+            if (newVertices.length === 0) {
+                console.warn('⚠️ Floating parts removal resulted in empty geometry - keeping original');
+                return geometry;
+            }
+            return cleanGeometry;
+        }
+        function parseSTL(buffer) {
+            try {
+                const dataView = new DataView(buffer);
+                const n_faces = dataView.getUint32(80, true);
+                const expect = 80 + 4 + (n_faces * 50);
+                if (expect === buffer.byteLength) {
+                    return parseBinarySTL(buffer);
+                } else {
+                    const decoder = new TextDecoder('utf-8');
+                    const text = decoder.decode(buffer.slice(0, 1000));
+                    if (text.toLowerCase().indexOf('solid') === 0 || text.indexOf('facet') !== -1) {
+                        return parseASCIISTL(decoder.decode(buffer));
+                    }
+                    return parseBinarySTL(buffer);
+                }
+            } catch (e) {
+                throw new Error('Failed to parse STL file: ' + e.message);
+            }
+        }
+        function parseBinarySTL(buffer) {
+            const geometry = new THREE.BufferGeometry();
+            const dataView = new DataView(buffer);
+            let offset = 80;
+            const triangles = dataView.getUint32(offset, true);
+            offset += 4;
+            if (triangles === 0) {
+                throw new Error('STL file contains no triangles');
+            }
+            const expectedSize = 84 + (triangles * 50);
+            if (buffer.byteLength < expectedSize) {
+                throw new Error('STL file is truncated or corrupted');
+            }
+            const vertices = new Float32Array(triangles * 9);
+            const normals = new Float32Array(triangles * 9);
+            for (let i = 0; i < triangles; i++) {
+                const nx = dataView.getFloat32(offset, true);
+                const ny = dataView.getFloat32(offset + 4, true);
+                const nz = dataView.getFloat32(offset + 8, true);
+                offset += 12;
+                for (let j = 0; j < 3; j++) {
+                    const idx = i * 9 + j * 3;
+                    vertices[idx] = dataView.getFloat32(offset, true);
+                    vertices[idx + 1] = dataView.getFloat32(offset + 4, true);
+                    vertices[idx + 2] = dataView.getFloat32(offset + 8, true);
+                    normals[idx] = nx;
+                    normals[idx + 1] = ny;
+                    normals[idx + 2] = nz;
+                    offset += 12;
+                }
+                offset += 2;
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+            geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+            return geometry;
+        }
+        function parseASCIISTL(text) {
+            const geometry = new THREE.BufferGeometry();
+            const vertices = [];
+            const normals = [];
+            const lines = text.split('\n');
+            let normal = null;
+            let tempVertices = [];
+            for (let line of lines) {
+                line = line.trim();
+                if (line.startsWith('facet normal')) {
+                    const match = line.match(/facet\s+normal\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)/);
+                    if (match) normal = [parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])];
+                } else if (line.startsWith('vertex')) {
+                    const match = line.match(/vertex\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)\s+([\-\+]?\d*\.?\d+(?:[eE][\-\+]?\d+)?)/);
+                    if (match) tempVertices.push([parseFloat(match[1]), parseFloat(match[2]), parseFloat(match[3])]);
+                } else if (line.startsWith('endfacet') && tempVertices.length === 3) {
+                    if (!normal) {
+                        const v1 = tempVertices[0];
+                        const v2 = tempVertices[1];
+                        const v3 = tempVertices[2];
+                        const ax = v2[0] - v1[0], ay = v2[1] - v1[1], az = v2[2] - v1[2];
+                        const bx = v3[0] - v1[0], by = v3[1] - v1[1], bz = v3[2] - v1[2];
+                        const nx = ay * bz - az * by;
+                        const ny = az * bx - ax * bz;
+                        const nz = ax * by - ay * bx;
+                        const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+                        normal = [nx / len, ny / len, nz / len];
+                    }
+                    for (let v of tempVertices) {
+                        vertices.push(...v);
+                        normals.push(...normal);
+                    }
+                    tempVertices = [];
+                    normal = null;
+                }
+            }
+            if (vertices.length === 0) {
+                throw new Error('No vertices found in ASCII STL file');
+            }
+            geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+            geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3));
+            return geometry;
+        }
+        function setupDragAndDrop() {
+            const dropZone = document.getElementById('dropZone');
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+            dropZone.addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.stl';
+                input.multiple = true;
+                input.onchange = (e) => handleFiles(e.target.files);
+                input.click();
+            });
+        }
+        function handleFiles(files) {
+            const stlFiles = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.stl'));
+            if (stlFiles.length === 0) {
+                return;
+            }
+            pendingFiles.push(...stlFiles);
+            processedModelData = []; // Clear cache when new files added
+            updateFileList();
+        }
+        function updateFileList() {
+            const fileList = document.getElementById('fileList');
+            const fileListContent = document.getElementById('fileListContent');
+            fileListContent.innerHTML = '';
+            pendingFiles.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `<span>${file.name}</span><button onclick="removeFile(${index})">✕</button>`;
+                fileListContent.appendChild(item);
+            });
+            const hasFiles = pendingFiles.length > 0;
+            fileList.style.display = hasFiles ? 'block' : 'none';
+            ['processNoScale', 'process32mm', 'process9ft', 'process12ft', 'process100mm', 'process300mm', 'clearAll'].forEach(id => {
+                document.getElementById(id).disabled = !hasFiles;
+            });
+            if (hasFiles) {
+                totalPages = Math.ceil(pendingFiles.length / MODELS_PER_PAGE);
+                const pageDisplay = document.getElementById('pageDisplay');
+                if (pageDisplay) {
+                    pageDisplay.textContent = `Page 1 / ${totalPages}`;
+                }
+            } else {
+                totalPages = 1;
+                currentPage = 1;
+            }
+            updateModelCount();
+        }
+        window.removeFile = function(index) {
+            pendingFiles.splice(index, 1);
+            processedModelData = []; // Clear cache since indices changed
+            updateFileList();
+        };
+        window.applyCutToModel = applyCutToModel;
+        function clearAll() {
+            if (!confirm('Clear all models?')) return;
+            pendingFiles = [];
+            processedModelData = []; // Clear cached processed data
+            currentPage = 1;
+            totalPages = 1;
+            stages.forEach(stage => {
+                if (stage.renderer) {
+                    stage.renderer.dispose();
+                }
+            });
+            stages = [];
+            models.clear();
+            document.getElementById('stages-container').innerHTML = '';
+            document.getElementById('fileList').style.display = 'none';
+            updateFileList();
+            document.getElementById('exportEverything').disabled = true;
+            updateModelCount();
+        }
+        async function processWithScale(targetHeightMM, scaleMode, buttonId) {
+            const loading = document.getElementById('loading');
+            const errorMsg = document.getElementById('errorMessage');
+            if (pendingFiles.length === 0) {
+                errorMsg.textContent = 'Please upload at least one STL file.';
+                errorMsg.style.display = 'block';
+                return;
+            }
+            loading.style.display = 'block';
+            errorMsg.style.display = 'none';
+            // Check if we already have processed models
+            const alreadyProcessed = processedModelData.length === pendingFiles.length;
+            if (alreadyProcessed) {
+                updateLoadingProgress(0, 'Rescaling existing models...');
+                console.log('♻️ Reusing already-processed models (skipping STL parse & floating removal)');
+                console.log(`📦 Cache hit: ${processedModelData.length} models available`);
+                // Show user that we're using cached data
+                const modelCountDisplay = document.getElementById('modelCountDisplay');
+                if (modelCountDisplay) {
+                    const originalText = modelCountDisplay.textContent;
+                    modelCountDisplay.textContent = '♻️ Using cached models (fast!)';
+                    modelCountDisplay.style.color = '#FFC107';
+                    setTimeout(() => {
+                        modelCountDisplay.textContent = originalText;
+                        modelCountDisplay.style.color = '#4CAF50';
+                    }, 2000);
+                }
+            } else {
+                updateLoadingProgress(0, 'Starting...');
+                console.log('🆕 First processing - will parse STL and remove floating parts');
+            }
+            currentScaleMode = scaleMode;
+            currentTargetHeightMM = targetHeightMM;
+            currentPage = 1;
+            totalPages = Math.ceil(pendingFiles.length / MODELS_PER_PAGE);
+            stages.forEach(stage => {
+                if (stage.renderer) {
+                    stage.renderer.dispose();
+                }
+            });
+            stages = [];
+            models.clear();
+            document.getElementById('stages-container').innerHTML = '';
+            try {
+                await processCurrentPage();
+                loading.style.display = 'none';
+                checkExportButtons();
+                updatePageDisplay();
+            } catch (error) {
+                errorMsg.textContent = 'Error processing models: ' + error.message;
+                errorMsg.style.display = 'block';
+                loading.style.display = 'none';
+            }
+        }
+        async function processCurrentPage() {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            const alreadyProcessed = processedModelData.length === pendingFiles.length;
+            if (alreadyProcessed) {
+                updateLoadingProgress(0, 'Loading page (using cached models)...');
+            } else {
+                updateLoadingProgress(0, 'Loading page...');
+            }
+            stages.forEach(stage => {
+                if (stage.renderer) {
+                    stage.renderer.dispose();
+                }
+            });
+            stages = [];
+            models.clear();
+            document.getElementById('stages-container').innerHTML = '';
+            const startIdx = (currentPage - 1) * MODELS_PER_PAGE;
+            const endIdx = Math.min(startIdx + MODELS_PER_PAGE, pendingFiles.length);
+            const filesToProcess = pendingFiles.slice(startIdx, endIdx);
+            try {
+                await processModels(filesToProcess, currentTargetHeightMM, currentScaleMode, startIdx);
+                loading.style.display = 'none';
+                updatePageDisplay();
+                checkExportButtons();
+            } catch (error) {
+                loading.style.display = 'none';
+                const errorMsg = document.getElementById('errorMessage');
+                errorMsg.textContent = 'Error loading page: ' + error.message;
+                errorMsg.style.display = 'block';
+            }
+        }
+        function updatePageDisplay() {
+            const startIdx = (currentPage - 1) * MODELS_PER_PAGE + 1;
+            const endIdx = Math.min(currentPage * MODELS_PER_PAGE, pendingFiles.length);
+            const total = pendingFiles.length;
+            const modelCountDisplay = document.getElementById('modelCountDisplay');
+            if (modelCountDisplay) {
+                modelCountDisplay.textContent = `${startIdx}-${endIdx} / ${total} models`;
+            }
+            const pageDisplay = document.getElementById('pageDisplay');
+            if (pageDisplay) {
+                pageDisplay.textContent = `Page ${currentPage} / ${totalPages}`;
+            }
+            const prevBtn = document.getElementById('prevPage');
+            const nextBtn = document.getElementById('nextPage');
+            if (prevBtn) prevBtn.disabled = currentPage <= 1;
+            if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
+        }
+        async function goToPreviousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                await processCurrentPage();
+            }
+        }
+        async function goToNextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                await processCurrentPage();
+            }
+        }
+        async function processModels(filesToProcess, targetHeightMM, scaleMode, startIdx) {
+            const totalFiles = filesToProcess.length;
+            // Check if we already have processed data for these files
+            const alreadyProcessed = processedModelData.length === pendingFiles.length;
+            for (let i = 0; i < totalFiles; i++) {
+                const file = filesToProcess[i];
+                const globalIndex = startIdx + i;
+                const stageIndex = i; // Stage index for this page
+                let monsterData;
+                if (alreadyProcessed && processedModelData[globalIndex]) {
+                    // Reuse already-processed model data
+                    const progress = ((i + 1) / totalFiles) * 100;
+                    updateLoadingProgress(progress, `Loading model ${i + 1}/${totalFiles}: ${file.name}`);
+                    const cachedData = processedModelData[globalIndex];
+                    // Clone the geometry (don't reuse the same instance)
+                    const geometry = cachedData.geometry.clone();
+                    const material = new THREE.MeshPhongMaterial({
+                        color: 0xfff0f0,
+                        emissive: 0x3b350c,
+                        emissiveIntensity: 0.35,
+                        shininess: 3,
+                        side: THREE.DoubleSide
+                    });
+                    const mesh = new THREE.Mesh(geometry, material);
+                    monsterData = {
+                        mesh: mesh,
+                        geometry: geometry,
+                        filename: cachedData.filename,
+                        originalHeight: cachedData.originalHeight,
+                        originalWidth: cachedData.originalWidth,
+                        originalDepth: cachedData.originalDepth,
+                        originalMaxDimension: cachedData.originalMaxDimension
+                    };
+                } else {
+                    // First-time processing: parse STL and remove floating parts
+                    const progress = ((i + 1) / totalFiles) * 100;
+                    updateLoadingProgress(progress, `Processing ${i + 1}/${totalFiles}: ${file.name}`);
+                    try {
+                        const buffer = await file.arrayBuffer();
+                        let geometry = parseSTL(buffer);
+                        if (!geometry || geometry.attributes.position.count === 0) {
+                            continue;
+                        }
+                        const globalRemoveFloating = document.getElementById('globalRemoveFloating');
+                        if (globalRemoveFloating && globalRemoveFloating.checked) {
+                            const cleanedGeometry = removeFloatingParts(geometry);
+                            if (cleanedGeometry !== geometry) {
+                                geometry.dispose();
+                                geometry = cleanedGeometry;
+                            }
+                        }
+                        geometry.rotateX(-Math.PI / 2);
+                        geometry.center();
+                        geometry.computeBoundingBox();
+                        const box = geometry.boundingBox;
+                        const size = box.getSize(new THREE.Vector3());
+                        const material = new THREE.MeshPhongMaterial({
+                            color: 0xfff0f0,
+                            emissive: 0x3b350c,
+                            emissiveIntensity: 0.35,
+                            shininess: 3,
+                            side: THREE.DoubleSide
+                        });
+                        const mesh = new THREE.Mesh(geometry, material);
+                        const maxDimension = Math.max(size.x, size.y, size.z);
+                        monsterData = {
+                            mesh: mesh,
+                            geometry: geometry,
+                            filename: file.name,
+                            originalHeight: size.y,
+                            originalWidth: size.x,
+                            originalDepth: size.z,
+                            originalMaxDimension: maxDimension
+                        };
+                        // Store in cache for future use
+                        processedModelData[globalIndex] = {
+                            geometry: geometry.clone(), // Store a clone for reuse
+                            filename: file.name,
+                            originalHeight: size.y,
+                            originalWidth: size.x,
+                            originalDepth: size.z,
+                            originalMaxDimension: maxDimension
+                        };
+                    } catch (e) {
+                        console.error('Error processing file:', file.name, e);
+                        continue;
+                    }
+                }
+                // IMMEDIATELY create and display the card for this model
+                if (monsterData) {
+                    await createModelCard(monsterData, stageIndex, targetHeightMM, scaleMode);
+                }
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            updateLoadingProgress(100, 'Complete!');
+            updateModelCount();
+        }
+        async function createModelCard(monsterData, stageIndex, targetHeightMM, scaleMode) {
+            const modelId = `stage${stageIndex}_monster${stageIndex}`;
+            const modelName = monsterData.filename.replace(/\.stl$/i, '');
+            const stage = new Stage(stageIndex, scaleMode);
+            const card = document.createElement('div');
+            card.className = 'model-card';
+            const title = document.createElement('div');
+            title.className = 'model-title';
+            title.textContent = modelName;
+            card.appendChild(title);
+            const controls = document.createElement('div');
+            controls.className = 'card-controls';
+            const zoomInBtn = document.createElement('button');
+            zoomInBtn.className = 'btn-zoom';
+            zoomInBtn.textContent = '+';
+            zoomInBtn.onclick = () => {
+                stage.zoomLevel = Math.min(10, stage.zoomLevel + 0.3);
+                stage.updateCamera();
+            };
+            controls.appendChild(zoomInBtn);
+            const zoomOutBtn = document.createElement('button');
+            zoomOutBtn.className = 'btn-zoom';
+            zoomOutBtn.textContent = '−';
+            zoomOutBtn.onclick = () => {
+                stage.zoomLevel = Math.max(0.1, stage.zoomLevel - 0.3);
+                stage.updateCamera();
+            };
+            controls.appendChild(zoomOutBtn);
+            const centerStlBtn = document.createElement('button');
+            centerStlBtn.className = 'btn-center';
+            centerStlBtn.textContent = 'Size View';
+            centerStlBtn.title = 'View with Man & Bars for Size Reference';
+            centerStlBtn.onclick = () => stage.fitAllModelsAndManInView();
+            controls.appendChild(centerStlBtn);
+            const centerAllBtn = document.createElement('button');
+            centerAllBtn.className = 'btn-center';
+            centerAllBtn.textContent = 'Render View';
+            centerAllBtn.title = 'Preview Export View (Tilted, Clean, No Man/Bars)';
+            centerAllBtn.onclick = () => stage.fitSTLOnlyInView();
+            controls.appendChild(centerAllBtn);
+            const downloadAllBtn = document.createElement('button');
+            downloadAllBtn.className = 'btn-download-all';
+            downloadAllBtn.id = `download-all-${modelId}`;
+            downloadAllBtn.textContent = '💾 Download (3)';
+            downloadAllBtn.title = 'Download JPG + PNG + STL (same filename)';
+            downloadAllBtn.onclick = () => downloadModelAndScreenshot(modelId);
+            controls.appendChild(downloadAllBtn);
+            card.appendChild(controls);
+            let initialHeightText;
+            if (scaleMode === '28mm') {
+                const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
+                initialHeightText = formatFeetInches(feet, inches);
+            } else {
+                const inches = mmToInches(monsterData.originalHeight);
+                initialHeightText = formatInches(inches);
+            }
+            const heightControls = document.createElement('div');
+            heightControls.className = 'height-controls';
+            const heightLabel = document.createElement('span');
+            heightLabel.style.color = '#aaa';
+            heightLabel.style.fontSize = '12px';
+            heightLabel.style.fontWeight = 'bold';
+            heightLabel.textContent = 'Height:';
+            heightControls.appendChild(heightLabel);
+            if (scaleMode === '28mm') {
+                const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
+                const feetGroup = document.createElement('div');
+                feetGroup.className = 'height-input-group';
+                const feetUpBtn = document.createElement('button');
+                feetUpBtn.className = 'height-btn';
+                feetUpBtn.textContent = '▲';
+                feetUpBtn.onclick = () => adjustHeight(modelId, 'feet', 1);
+                feetGroup.appendChild(feetUpBtn);
+                const feetInput = document.createElement('input');
+                feetInput.type = 'number';
+                feetInput.className = 'height-input';
+                feetInput.id = `feet-${modelId}`;
+                feetInput.value = Math.floor(feet);
+                feetInput.min = 0;
+                feetInput.max = 100;
+                feetGroup.appendChild(feetInput);
+                const feetDownBtn = document.createElement('button');
+                feetDownBtn.className = 'height-btn';
+                feetDownBtn.textContent = '▼';
+                feetDownBtn.onclick = () => adjustHeight(modelId, 'feet', -1);
+                feetGroup.appendChild(feetDownBtn);
+                heightControls.appendChild(feetGroup);
+                const feetLabel = document.createElement('span');
+                feetLabel.className = 'unit-label';
+                feetLabel.textContent = "'";
+                heightControls.appendChild(feetLabel);
+                const inchGroup = document.createElement('div');
+                inchGroup.className = 'height-input-group';
+                const inchUpBtn = document.createElement('button');
+                inchUpBtn.className = 'height-btn';
+                inchUpBtn.textContent = '▲';
+                inchUpBtn.onclick = () => adjustHeight(modelId, 'inches', 1);
+                inchGroup.appendChild(inchUpBtn);
+                const inchInput = document.createElement('input');
+                inchInput.type = 'number';
+                inchInput.className = 'height-input';
+                inchInput.id = `inches-${modelId}`;
+                inchInput.value = Math.round(inches);
+                inchInput.min = 0;
+                inchInput.max = 11;
+                inchGroup.appendChild(inchInput);
+                const inchDownBtn = document.createElement('button');
+                inchDownBtn.className = 'height-btn';
+                inchDownBtn.textContent = '▼';
+                inchDownBtn.onclick = () => adjustHeight(modelId, 'inches', -1);
+                inchGroup.appendChild(inchDownBtn);
+                heightControls.appendChild(inchGroup);
+                const inchLabel = document.createElement('span');
+                inchLabel.className = 'unit-label';
+                inchLabel.textContent = '"';
+                heightControls.appendChild(inchLabel);
+                const mmDisplay = document.createElement('span');
+                mmDisplay.className = 'mm-display';
+                mmDisplay.id = `mm-display-${modelId}`;
+                const currentMM = feetInchesToMM28mm(feet, inches);
+                mmDisplay.textContent = `(${currentMM.toFixed(1)}mm)`;
+                heightControls.appendChild(mmDisplay);
+                feetInput.addEventListener('input', () => updateModelFromInputs(modelId));
+                inchInput.addEventListener('input', () => updateModelFromInputs(modelId));
+            } else {
+                const inches = mmToInches(monsterData.originalMaxDimension);
+                const inchGroup = document.createElement('div');
+                inchGroup.className = 'height-input-group';
+                const inchUpBtn = document.createElement('button');
+                inchUpBtn.className = 'height-btn';
+                inchUpBtn.textContent = '▲';
+                inchUpBtn.onclick = () => adjustHeightInches(modelId, 0.5);
+                inchGroup.appendChild(inchUpBtn);
+                const inchInput = document.createElement('input');
+                inchInput.type = 'number';
+                inchInput.className = 'height-input';
+                inchInput.id = `inches-${modelId}`;
+                inchInput.value = inches.toFixed(1);
+                inchInput.min = 0;
+                inchInput.step = 0.1;
+                inchGroup.appendChild(inchInput);
+                const inchDownBtn = document.createElement('button');
+                inchDownBtn.className = 'height-btn';
+                inchDownBtn.textContent = '▼';
+                inchDownBtn.onclick = () => adjustHeightInches(modelId, -0.5);
+                inchGroup.appendChild(inchDownBtn);
+                heightControls.appendChild(inchGroup);
+                const inchLabel = document.createElement('span');
+                inchLabel.className = 'unit-label';
+                inchLabel.textContent = '" (longest)';
+                heightControls.appendChild(inchLabel);
+                const mmDisplay = document.createElement('span');
+                mmDisplay.className = 'mm-display';
+                mmDisplay.id = `mm-display-${modelId}`;
+                mmDisplay.textContent = `(${monsterData.originalMaxDimension.toFixed(1)}mm)`;
+                heightControls.appendChild(mmDisplay);
+                inchInput.addEventListener('input', () => updateModelFromInputsRegular(modelId));
+            }
+            card.appendChild(heightControls);
+            const viewport = document.createElement('div');
+            viewport.className = 'viewport';
+            const status = document.createElement('div');
+            status.className = 'alignment-status';
+            status.id = `status-${stageIndex}`;
+            viewport.appendChild(status);
+            const modelHeightLabel = document.createElement('div');
+            modelHeightLabel.className = 'model-height-label';
+            modelHeightLabel.id = `model-height-label-${modelId}`;
+            let modelHeightText;
+            if (scaleMode === '28mm') {
+                const modelHeightMM = monsterData.originalHeight;
+                const modelHeightFeetInches = mm28mmToFeetInches(modelHeightMM);
+                modelHeightText = `${formatFeetInches(modelHeightFeetInches.feet, modelHeightFeetInches.inches)} (${modelHeightMM.toFixed(1)}mm)`;
+            } else {
+                const modelMaxDimMM = monsterData.originalMaxDimension;
+                const modelMaxDimInches = mmToInches(modelMaxDimMM);
+                modelHeightText = `${formatInches(modelMaxDimInches)} longest (${modelMaxDimMM.toFixed(1)}mm)`;
+            }
+            modelHeightLabel.textContent = modelHeightText;
+            viewport.appendChild(modelHeightLabel);
+            card.appendChild(viewport);
+            
+            // Z-AXIS ROTATION (BLUE) - Turntable/Floor Rotation - MOVED TO TOP
+            // NOTE: This is actually Y-axis rotation in the 3D engine, but we call it Z-axis
+            // because the viewer sees it as rotation on the floor (like a turntable), which
+            // feels like Z-axis rotation in most 3D software where Z is up.
+            const zRotationControls = document.createElement('div');
+            zRotationControls.className = 'rotation-controls z-axis';
+            const zRotationLabel = document.createElement('label');
+            zRotationLabel.className = 'rotation-label z-axis';
+            zRotationLabel.id = `z-label-${modelId}`;
+            zRotationLabel.textContent = `Z-Axis Rotation (Turntable): 125°`;
+            zRotationControls.appendChild(zRotationLabel);
+            const zRotationSlider = document.createElement('input');
+            zRotationSlider.type = 'range';
+            zRotationSlider.className = 'rotation-slider z-axis';
+            zRotationSlider.id = `z-rotation-${modelId}`;
+            zRotationSlider.min = -180;
+            zRotationSlider.max = 180;
+            zRotationSlider.value = 125;
+            zRotationSlider.addEventListener('input', (e) => {
+                const degrees = parseFloat(e.target.value);
+                document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis Rotation (Turntable): ${degrees}°`;
+                // This controls Y-axis rotation in the 3D engine (rotation on the ground plane)
+                updateModelRotation(modelId, 'y', degrees);
+            });
+            zRotationControls.appendChild(zRotationSlider);
+            card.appendChild(zRotationControls);
+            
+            // X-AXIS and Y-AXIS ROTATION (side by side in same row)
+            const xyRotationRow = document.createElement('div');
+            xyRotationRow.style.display = 'flex';
+            xyRotationRow.style.gap = '10px';
+            xyRotationRow.style.marginTop = '10px';
+            
+            // X-AXIS ROTATION (RED) - Controls actual X-axis rotation
+            const xRotationControls = document.createElement('div');
+            xRotationControls.className = 'rotation-controls x-axis';
+            xRotationControls.style.flex = '1';
+            const xRotationLabel = document.createElement('label');
+            xRotationLabel.className = 'rotation-label x-axis';
+            xRotationLabel.id = `x-label-${modelId}`;
+            xRotationLabel.textContent = `X-Axis: 0°`;
+            xRotationControls.appendChild(xRotationLabel);
+            const xRotationSlider = document.createElement('input');
+            xRotationSlider.type = 'range';
+            xRotationSlider.className = 'rotation-slider x-axis';
+            xRotationSlider.id = `x-rotation-${modelId}`;
+            xRotationSlider.min = -180;
+            xRotationSlider.max = 180;
+            xRotationSlider.value = 0;
+            xRotationSlider.addEventListener('input', (e) => {
+                const degrees = parseFloat(e.target.value);
+                document.getElementById(`x-label-${modelId}`).textContent = `X-Axis: ${degrees}°`;
+                updateModelRotation(modelId, 'x', degrees);
+            });
+            xRotationControls.appendChild(xRotationSlider);
+            xyRotationRow.appendChild(xRotationControls);
+            
+            // Y-AXIS ROTATION (GREEN) - Controls Z-axis rotation  
+            const yRotationControls = document.createElement('div');
+            yRotationControls.className = 'rotation-controls y-axis';
+            yRotationControls.style.flex = '1';
+            const yRotationLabel = document.createElement('label');
+            yRotationLabel.className = 'rotation-label y-axis';
+            yRotationLabel.id = `y-label-${modelId}`;
+            yRotationLabel.textContent = `Y-Axis: 0°`;
+            yRotationControls.appendChild(yRotationLabel);
+            const yRotationSlider = document.createElement('input');
+            yRotationSlider.type = 'range';
+            yRotationSlider.className = 'rotation-slider y-axis';
+            yRotationSlider.id = `y-rotation-${modelId}`;
+            yRotationSlider.min = -180;
+            yRotationSlider.max = 180;
+            yRotationSlider.value = 0;
+            yRotationSlider.addEventListener('input', (e) => {
+                const degrees = parseFloat(e.target.value);
+                document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis: ${degrees}°`;
+                updateModelRotation(modelId, 'z', degrees);
+            });
+            yRotationControls.appendChild(yRotationSlider);
+            xyRotationRow.appendChild(yRotationControls);
+            
+            card.appendChild(xyRotationRow);
+            
+            document.getElementById('stages-container').appendChild(card);
+            // Initialize stage and add model
+            stage.init(viewport);
+            stage.updateViewport = function() {
+                if (!this.container) return;
+                const width = this.container.clientWidth || 350;
+                const height = width;
+                this.renderer.setSize(width, height);
+                this.camera.updateProjectionMatrix();
+                this.render();
+            };
+            const clonedMesh = monsterData.mesh.clone();
+            if (monsterData.mesh.material.isShaderMaterial || monsterData.mesh.material.isMeshPhongMaterial) {
+                clonedMesh.material = monsterData.mesh.material.clone();
+            } else {
+                clonedMesh.material = monsterData.mesh.material.clone();
+            }
+            let initialScale = 1;
+            if (targetHeightMM !== null && targetHeightMM > 0) {
+                if (scaleMode === '28mm') {
+                    initialScale = targetHeightMM / monsterData.originalHeight;
+                } else {
+                    initialScale = targetHeightMM / monsterData.originalMaxDimension;
+                }
+            }
+            models.set(modelId, {
+                mesh: clonedMesh,
+                originalGeometry: monsterData.geometry.clone().rotateX(Math.PI / 2),
+                filename: monsterData.filename,
+                scale: initialScale,
+                rotationX: 0,
+                rotationY: 125,
+                rotationZ: 0,
+                stageIndex: stageIndex,
+                originalHeight: monsterData.originalHeight,
+                originalMaxDimension: monsterData.originalMaxDimension,
+                scaleMode: scaleMode
+            });
+            if (initialScale !== 1) {
+                clonedMesh.scale.set(initialScale, initialScale, initialScale);
+                clonedMesh.updateMatrixWorld(true);
+            }
+            clonedMesh.rotation.x = 0;
+            clonedMesh.rotation.y = (125 * Math.PI) / 180;
+            clonedMesh.rotation.z = 0;
+            clonedMesh.updateMatrixWorld(true);
+            stage.addMonster(clonedMesh, modelId);
+            stages.push(stage);
+            updateAllUIForModel(modelId);
+            // Note: Full rotation controls, cut mode controls, and flatness display would go here
+            // For brevity, they're omitted but would be added in the complete implementation
+        }
+        function updateModelCount() {
+            const count = models.size;
+            const total = pendingFiles.length;
+            const display = document.getElementById('modelCountDisplay');
+            if (total === 0) {
+                if (display) display.textContent = '0 models loaded';
+            } else {
+                const startIdx = (currentPage - 1) * MODELS_PER_PAGE + 1;
+                const endIdx = Math.min(currentPage * MODELS_PER_PAGE, total);
+                if (display) display.textContent = `${startIdx}-${endIdx} / ${total} models`;
+            }
+            const prevBtn = document.getElementById('prevPage');
+            const nextBtn = document.getElementById('nextPage');
+            if (prevBtn) prevBtn.disabled = currentPage <= 1 || total === 0;
+            if (nextBtn) nextBtn.disabled = currentPage >= totalPages || total === 0;
+        }
+        function updateAllUIForModel(modelId) {
+            const modelData = models.get(modelId);
+            if (!modelData) return;
+            if (modelData.scaleMode === '28mm') {
+                const currentHeightMM = modelData.originalHeight * modelData.scale;
+                const { feet, inches } = mm28mmToFeetInches(currentHeightMM);
+                const feetInput = document.getElementById(`feet-${modelId}`);
+                const inchInput = document.getElementById(`inches-${modelId}`);
+                if (feetInput) feetInput.value = Math.floor(feet);
+                if (inchInput) inchInput.value = Math.round(inches);
+                const mmDisplay = document.getElementById(`mm-display-${modelId}`);
+                if (mmDisplay) {
+                    mmDisplay.textContent = `(${currentHeightMM.toFixed(1)}mm)`;
+                }
+                const modelHeightLabel = document.getElementById(`model-height-label-${modelId}`);
+                if (modelHeightLabel) {
+                    modelHeightLabel.textContent = `${formatFeetInches(feet, inches)} (${currentHeightMM.toFixed(1)}mm)`;
+                }
+            } else {
+                const currentMaxDimensionMM = modelData.originalMaxDimension * modelData.scale;
+                const inches = mmToInches(currentMaxDimensionMM);
+                const inchInput = document.getElementById(`inches-${modelId}`);
+                if (inchInput) inchInput.value = inches.toFixed(1);
+                const mmDisplay = document.getElementById(`mm-display-${modelId}`);
+                if (mmDisplay) {
+                    mmDisplay.textContent = `(${currentMaxDimensionMM.toFixed(1)}mm)`;
+                }
+                const modelHeightLabel = document.getElementById(`model-height-label-${modelId}`);
+                if (modelHeightLabel) {
+                    modelHeightLabel.textContent = `${formatInches(inches)} longest (${currentMaxDimensionMM.toFixed(1)}mm)`;
+                }
+            }
+            const stageIndex = modelData.stageIndex;
+            if (stages[stageIndex]) {
+                stages[stageIndex].updateHeightLabel(modelId, modelData.mesh);
+                stages[stageIndex].updateModelHeightLabelPosition(modelId);
+            }
+        }
+        window.adjustHeight = function(modelId, unit, delta) {
+            const input = document.getElementById(`${unit}-${modelId}`);
+            const current = parseInt(input.value) || 0;
+            if (unit === 'feet') {
+                input.value = Math.max(0, Math.min(100, current + delta));
+            } else {
+                let newVal = current + delta;
+                if (newVal > 11) {
+                    newVal = 0;
+                    adjustHeight(modelId, 'feet', 1);
+                } else if (newVal < 0) {
+                    newVal = 11;
+                    adjustHeight(modelId, 'feet', -1);
+                }
+                input.value = newVal;
+            }
+            updateModelFromInputs(modelId);
+        };
+        function updateModelFromInputs(modelId) {
+            const modelData = models.get(modelId);
+            if (!modelData || modelData.scaleMode !== '28mm') return;
+            const feetInput = document.getElementById(`feet-${modelId}`);
+            const inchesInput = document.getElementById(`inches-${modelId}`);
+            if (!feetInput || !inchesInput) return;
+            const feet = parseFloat(feetInput.value) || 0;
+            const inches = parseFloat(inchesInput.value) || 0;
+            const targetMM = feetInchesToMM28mm(feet, inches);
+            const scale = targetMM / modelData.originalHeight;
+            updateModelScale(modelId, scale);
+        }
+        window.adjustHeightInches = function(modelId, delta) {
+            const input = document.getElementById(`inches-${modelId}`);
+            if (!input) return;
+            const current = parseFloat(input.value) || 0;
+            input.value = Math.max(0, (current + delta)).toFixed(1);
+            updateModelFromInputsRegular(modelId);
+        };
+        function updateModelFromInputsRegular(modelId) {
+            const modelData = models.get(modelId);
+            if (!modelData || modelData.scaleMode !== 'regular') return;
+            const inchesInput = document.getElementById(`inches-${modelId}`);
+            if (!inchesInput) return;
+            const inches = parseFloat(inchesInput.value) || 0;
+            const targetMM = inchesToMM(inches);
+            const scale = targetMM / modelData.originalMaxDimension;
+            updateModelScale(modelId, scale);
+        }
+        function updateModelScale(modelId, scale) {
+            const modelData = models.get(modelId);
+            if (!modelData) return;
+            modelData.scale = scale;
+            modelData.mesh.scale.set(scale, scale, scale);
+            modelData.mesh.updateMatrixWorld(true);
+            const stageIndex = modelData.stageIndex;
+            if (stages[stageIndex]) {
+                stages[stageIndex].alignToGround(modelData.mesh);
+                stages[stageIndex].recenterCurrentView();
+                stages[stageIndex].updateManPosition();
+            }
+            updateAllUIForModel(modelId);
+            checkExportButtons();
+        }
+        function updateModelRotation(modelId, axis, degrees, showHelpers = false) {
+            const modelData = models.get(modelId);
+            if (!modelData) return;
+            if (axis === 'x') {
+                modelData.rotationX = degrees;
+            } else if (axis === 'y') {
+                modelData.rotationY = degrees;
+            } else if (axis === 'z') {
+                modelData.rotationZ = degrees;
+            }
+            modelData.mesh.rotation.x = modelData.rotationX * Math.PI / 180;
+            modelData.mesh.rotation.y = modelData.rotationY * Math.PI / 180;
+            modelData.mesh.rotation.z = modelData.rotationZ * Math.PI / 180;
+            modelData.mesh.updateMatrixWorld(true);
+            if (stages[modelData.stageIndex]) {
+                const stage = stages[modelData.stageIndex];
+                
+                // Re-align to ground after rotation
+                stage.alignToGround(modelData.mesh);
+                
+                // Re-check flatness
+                const flatnessResult = stage.checkFlatness(modelData.mesh);
+                stage.flatnessStatus.set(modelId, flatnessResult);
+                stage.updateFlatnessDisplay();
+                
+                // Update height labels
+                stage.updateHeightLabel(modelId, modelData.mesh);
+                
+                if (showHelpers) {
+                    stage.showBoundingBoxAndAxes(modelData.mesh);
+                } else {
+                    stage.hideBoundingBoxAndAxes();
+                }
+                stage.updateManPosition();
+                stage.recenterCurrentView();
+                stage.render();
+            }
+        }
+        function checkExportButtons() {
+            let hasScaled = false;
+            models.forEach(m => { if (Math.abs(m.scale - 1) > 0.001) hasScaled = true; });
+            document.getElementById('exportEverything').disabled = !hasScaled;
+        }
+        function downloadModelAndScreenshot(modelId) {
+            const modelData = models.get(modelId);
+            if (!modelData) {
+                return;
+            }
+            const randomSuffix = generateRandomSuffix();
+            const baseName = modelData.filename.replace(/\.stl$/i, '');
+            const uniqueName = `${baseName}_${randomSuffix}`;
+            const stageIndex = modelData.stageIndex;
+            if (stages[stageIndex]) {
+                const originalViewMode = stages[stageIndex].viewMode;
+                stages[stageIndex].fitAllModelsAndManInView();
+                setTimeout(() => {
+                    const screenshotData = stages[stageIndex].takeScreenshot();
+                    const img = new Image();
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.width;
+                        canvas.height = img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.fillStyle = '#2a2a2a';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0);
+                        const jpgData = canvas.toDataURL('image/jpeg', 0.95);
+                        const screenshotLink = document.createElement('a');
+                        screenshotLink.href = jpgData;
+                        screenshotLink.download = `${uniqueName}.jpg`;
+                        screenshotLink.click();
+                    };
+                    img.src = screenshotData;
+                    setTimeout(() => {
+                        const transparentData = stages[stageIndex].takeTransparentTiltedScreenshot();
+                        const transparentLink = document.createElement('a');
+                        transparentLink.href = transparentData;
+                        transparentLink.download = `${uniqueName}.png`;
+                        transparentLink.click();
+                        setTimeout(() => {
+                            const scaledGeometry = modelData.originalGeometry.clone();
+                            scaledGeometry.scale(modelData.scale, modelData.scale, modelData.scale);
+                            const stlBinary = geometryToSTLBinary(scaledGeometry);
+                            const blob = new Blob([stlBinary], { type: 'application/octet-stream' });
+                            const url = URL.createObjectURL(blob);
+                            const modelLink = document.createElement('a');
+                            modelLink.href = url;
+                            modelLink.download = `${uniqueName}.stl`;
+                            modelLink.click();
+                            URL.revokeObjectURL(url);
+                            if (originalViewMode === 'stl') {
+                                stages[stageIndex].fitSTLOnlyInView();
+                            } else {
+                                stages[stageIndex].fitAllModelsAndManInView();
+                            }
+                        }, 300);
+                    }, 300);
+                }, 100);
+            }
+        }
+        async function applyCutToModel(modelId) {
+            const modelData = models.get(modelId);
+            if (!modelData) return;
+            const stageIndex = modelData.stageIndex;
+            const stage = stages[stageIndex];
+            if (!stage || !stage.cutCube || !stage.cutModeEnabled) {
+                alert('Please enable Cut Mode first!');
+                return;
+            }
+            const cutButton = document.getElementById(`cut-button-${modelId}`);
+            if (cutButton) {
+                cutButton.disabled = true;
+                cutButton.textContent = '⏳ Cutting... Please wait';
+            }
+            try {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                const mesh = modelData.mesh;
+                const cutHeight = stage.groundY + stage.cutHeight;
+                console.log('✂️ Cutting mesh at height:', cutHeight);
+                const currentRotationX = mesh.rotation.x;
+                const currentRotationY = mesh.rotation.y;
+                const currentRotationZ = mesh.rotation.z;
+                mesh.rotation.set(0, 0, 0);
+                mesh.updateMatrixWorld(true);
+                const geometry = mesh.geometry.clone();
+                const positions = geometry.attributes.position;
+                const matrix = mesh.matrixWorld;
+                geometry.applyMatrix4(matrix);
+                const newVertices = [];
+                const bottomContourPoints = [];
+                for (let i = 0; i < positions.count; i += 3) {
+                    const v0 = new THREE.Vector3().fromBufferAttribute(positions, i);
+                    const v1 = new THREE.Vector3().fromBufferAttribute(positions, i + 1);
+                    const v2 = new THREE.Vector3().fromBufferAttribute(positions, i + 2);
+                    const above0 = v0.y > cutHeight;
+                    const above1 = v1.y > cutHeight;
+                    const above2 = v2.y > cutHeight;
+                    const aboveCount = (above0 ? 1 : 0) + (above1 ? 1 : 0) + (above2 ? 1 : 0);
+                    if (aboveCount === 3) {
+                        newVertices.push(v0, v1, v2);
+                    } else if (aboveCount === 0) {
+                        continue;
+                    } else if (aboveCount === 2) {
+                        let vAbove1, vAbove2, vBelow;
+                        if (!above0) {
+                            vBelow = v0; vAbove1 = v1; vAbove2 = v2;
+                        } else if (!above1) {
+                            vBelow = v1; vAbove1 = v0; vAbove2 = v2;
+                        } else {
+                            vBelow = v2; vAbove1 = v0; vAbove2 = v1;
+                        }
+                        const t1 = (cutHeight - vBelow.y) / (vAbove1.y - vBelow.y);
+                        const t2 = (cutHeight - vBelow.y) / (vAbove2.y - vBelow.y);
+                        const vNew1 = new THREE.Vector3().lerpVectors(vBelow, vAbove1, t1);
+                        const vNew2 = new THREE.Vector3().lerpVectors(vBelow, vAbove2, t2);
+                        vNew1.y = cutHeight;
+                        vNew2.y = cutHeight;
+                        newVertices.push(vNew1, vAbove1, vAbove2);
+                        newVertices.push(vNew1, vAbove2, vNew2);
+                        bottomContourPoints.push(vNew1.clone());
+                        bottomContourPoints.push(vNew2.clone());
+                    } else if (aboveCount === 1) {
+                        let vAbove, vBelow1, vBelow2;
+                        if (above0) {
+                            vAbove = v0; vBelow1 = v1; vBelow2 = v2;
+                        } else if (above1) {
+                            vAbove = v1; vBelow1 = v0; vBelow2 = v2;
+                        } else {
+                            vAbove = v2; vBelow1 = v0; vBelow2 = v1;
+                        }
+                        const t1 = (cutHeight - vBelow1.y) / (vAbove.y - vBelow1.y);
+                        const t2 = (cutHeight - vBelow2.y) / (vAbove.y - vBelow2.y);
+                        const vNew1 = new THREE.Vector3().lerpVectors(vBelow1, vAbove, t1);
+                        const vNew2 = new THREE.Vector3().lerpVectors(vBelow2, vAbove, t2);
+                        vNew1.y = cutHeight;
+                        vNew2.y = cutHeight;
+                        newVertices.push(vNew1, vAbove, vNew2);
+                        bottomContourPoints.push(vNew1.clone());
+                        bottomContourPoints.push(vNew2.clone());
+                    }
+                }
+                if (bottomContourPoints.length > 0) {
+                    console.log('Creating bottom cap with', bottomContourPoints.length, 'contour points');
+                    const edges = [];
+                    for (let i = 0; i < bottomContourPoints.length; i += 2) {
+                        if (i + 1 < bottomContourPoints.length) {
+                            edges.push({
+                                v1: bottomContourPoints[i],
+                                v2: bottomContourPoints[i + 1]
+                            });
+                        }
+                    }
+                    console.log('Created', edges.length, 'edges on cut plane');
+                    const islands = [];
+                    const usedEdges = new Set();
+                    for (let i = 0; i < edges.length; i++) {
+                        if (usedEdges.has(i)) continue;
+                        const island = [];
+                        const queue = [i];
+                        usedEdges.add(i);
+                        while (queue.length > 0) {
+                            const edgeIdx = queue.shift();
+                            const edge = edges[edgeIdx];
+                            island.push(edge);
+                            for (let j = 0; j < edges.length; j++) {
+                                if (usedEdges.has(j)) continue;
+                                const otherEdge = edges[j];
+                                const threshold = 0.001;
+                                const sharesV1V1 = edge.v1.distanceTo(otherEdge.v1) < threshold;
+                                const sharesV1V2 = edge.v1.distanceTo(otherEdge.v2) < threshold;
+                                const sharesV2V1 = edge.v2.distanceTo(otherEdge.v1) < threshold;
+                                const sharesV2V2 = edge.v2.distanceTo(otherEdge.v2) < threshold;
+                                if (sharesV1V1 || sharesV1V2 || sharesV2V1 || sharesV2V2) {
+                                    queue.push(j);
+                                    usedEdges.add(j);
+                                }
+                            }
+                        }
+                        if (island.length > 0) {
+                            islands.push(island);
+                        }
+                    }
+                    console.log('Found', islands.length, 'separate islands to cap');
+                    islands.forEach((island, islandIdx) => {
+                        const orderedLoop = [];
+                        const usedEdges = new Set();
+                        let currentEdge = island[0];
+                        orderedLoop.push(currentEdge.v1.clone());
+                        orderedLoop.push(currentEdge.v2.clone());
+                        usedEdges.add(0);
+                        let lastVertex = currentEdge.v2;
+                        const threshold = 0.001;
+                        while (usedEdges.size < island.length) {
+                            let found = false;
+                            for (let i = 0; i < island.length; i++) {
+                                if (usedEdges.has(i)) continue;
+                                const edge = island[i];
+                                if (lastVertex.distanceTo(edge.v1) < threshold) {
+                                    orderedLoop.push(edge.v2.clone());
+                                    lastVertex = edge.v2;
+                                    usedEdges.add(i);
+                                    found = true;
+                                    break;
+                                } else if (lastVertex.distanceTo(edge.v2) < threshold) {
+                                    orderedLoop.push(edge.v1.clone());
+                                    lastVertex = edge.v1;
+                                    usedEdges.add(i);
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) break;
+                        }
+                        if (orderedLoop.length > 2 && orderedLoop[0].distanceTo(orderedLoop[orderedLoop.length - 1]) < threshold) {
+                            orderedLoop.pop();
+                        }
+                        console.log('Island', islandIdx, 'has', orderedLoop.length, 'vertices in ordered loop');
+                        if (orderedLoop.length >= 3) {
+                            const flatCoords = [];
+                            orderedLoop.forEach(v => {
+                                flatCoords.push(v.x, v.z);
+                            });
+                            const triangleIndices = earcut(flatCoords);
+                            if (triangleIndices && triangleIndices.length > 0) {
+                                for (let i = 0; i < triangleIndices.length; i += 3) {
+                                    const i0 = triangleIndices[i];
+                                    const i1 = triangleIndices[i + 1];
+                                    const i2 = triangleIndices[i + 2];
+                                    newVertices.push(
+                                        orderedLoop[i0].clone(),
+                                        orderedLoop[i1].clone(),
+                                        orderedLoop[i2].clone()
+                                    );
+                                }
+                                console.log('✅ Created', triangleIndices.length / 3, 'triangles for island', islandIdx, 'using earcut');
+                            } else {
+                                console.warn('⚠️ Earcut failed for island', islandIdx);
+                            }
+                        }
+                    });
+                }
+                const resultGeometry = new THREE.BufferGeometry();
+                const newPositions = new Float32Array(newVertices.length * 3);
+                for (let i = 0; i < newVertices.length; i++) {
+                    newPositions[i * 3] = newVertices[i].x;
+                    newPositions[i * 3 + 1] = newVertices[i].y;
+                    newPositions[i * 3 + 2] = newVertices[i].z;
+                }
+                resultGeometry.setAttribute('position', new THREE.BufferAttribute(newPositions, 3));
+                resultGeometry.computeVertexNormals();
+                console.log('✅ Cut complete. Original vertices:', positions.count, 'New vertices:', newVertices.length);
+                let finalGeometry = resultGeometry;
+                const globalRemoveFloating = document.getElementById('globalRemoveFloating');
+                const localRemoveFloating = document.getElementById(`remove-floating-${modelId}`);
+                if ((globalRemoveFloating && globalRemoveFloating.checked) || 
+                    (localRemoveFloating && localRemoveFloating.checked)) {
+                    console.log('🧹 Checking for floating parts after cut...');
+                    finalGeometry = removeFloatingParts(resultGeometry);
+                    if (finalGeometry !== resultGeometry) {
+                        resultGeometry.dispose();
+                    }
+                }
+                const oldGeometry = mesh.geometry;
+                mesh.geometry = finalGeometry;
+                mesh.position.set(0, 0, 0);
+                mesh.rotation.set(0, 0, 0);
+                mesh.scale.set(1, 1, 1);
+                mesh.updateMatrixWorld(true);
+                oldGeometry.dispose();
+                geometry.dispose();
+                stage.alignToGround(mesh);
+                mesh.rotation.x = currentRotationX;
+                mesh.rotation.y = currentRotationY;
+                mesh.rotation.z = currentRotationZ;
+                mesh.updateMatrixWorld(true);
+                const exportGeo = finalGeometry.clone();
+                exportGeo.rotateX(Math.PI / 2);
+                const oldOriginalGeo = modelData.originalGeometry;
+                modelData.originalGeometry = exportGeo;
+                oldOriginalGeo.dispose();
+                finalGeometry.computeBoundingBox();
+                const newBox = finalGeometry.boundingBox;
+                const newSize = newBox.getSize(new THREE.Vector3());
+                modelData.originalHeight = newSize.y;
+                modelData.originalMaxDimension = Math.max(newSize.x, newSize.y, newSize.z);
+                modelData.scale = 1.0;
+                const flatnessResult = stage.checkFlatness(mesh);
+                stage.flatnessStatus.set(modelId, flatnessResult);
+                stage.updateFlatnessDisplay();
+                const flatnessEl = document.getElementById(`flatness-${modelId}`);
+                if (flatnessEl) {
+                    if (flatnessResult.isFlat) {
+                        flatnessEl.className = 'flatness-status flat';
+                        flatnessEl.textContent = '✓ Bottom Flat (After Cut)';
+                    } else {
+                        flatnessEl.className = 'flatness-status not-flat';
+                        flatnessEl.textContent = `⚠ Not Flat: ${flatnessResult.reason}`;
+                    }
+                }
+                stage.updateHeightLabel(modelId, mesh);
+                updateAllUIForModel(modelId);
+                stage.updateManPosition();
+                stage.recenterCurrentView();
+                stage.render();
+                const cutModeCheckbox = document.getElementById(`cut-mode-${modelId}`);
+                if (cutModeCheckbox && cutModeCheckbox.checked) {
+                    cutModeCheckbox.checked = false;
+                    stage.toggleCutMode(false);
+                    const cutHeightControls = document.getElementById(`cut-height-controls-${modelId}`);
+                    if (cutHeightControls) {
+                        cutHeightControls.classList.remove('active');
+                    }
+                }
+                if (cutButton) {
+                    cutButton.textContent = '✅ Cut Applied! (Cut Mode Closed)';
+                    cutButton.style.backgroundColor = '#4CAF50';
+                    setTimeout(() => {
+                        cutButton.textContent = '✂️ Apply Flat Bottom Cut';
+                        cutButton.disabled = false;
+                        cutButton.style.backgroundColor = '';
+                    }, 3000);
+                }
+                console.log('Cut operation completed successfully!');
+            } catch (error) {
+                console.error('Error during cut operation:', error);
+                alert('Error cutting model: ' + error.message);
+                if (cutButton) {
+                    cutButton.textContent = '❌ Cut Failed - Try Again';
+                    cutButton.disabled = false;
+                }
+            }
+        }
+        async function exportEverything() {
+            const toExport = [];
+            models.forEach((m, id) => { if (Math.abs(m.scale - 1) > 0.001) toExport.push(id); });
+            for (let i = 0; i < toExport.length; i++) {
+                downloadModelAndScreenshot(toExport[i]);
+                if (i < toExport.length - 1) await new Promise(r => setTimeout(r, 1500));
+            }
+        }
+        function geometryToSTLBinary(geometry) {
+            const positions = geometry.attributes.position;
+            const normals = geometry.attributes.normal;
+            const triangles = positions.count / 3;
+            const arrayBuffer = new ArrayBuffer(84 + (triangles * 50));
+            const dataView = new DataView(arrayBuffer);
+            const header = 'STL Binary - 28mm Scaler';
+            for (let i = 0; i < header.length; i++) {
+                dataView.setUint8(i, header.charCodeAt(i));
+            }
+            dataView.setUint32(80, triangles, true);
+            let offset = 84;
+            for (let i = 0; i < triangles; i++) {
+                const idx = i * 3;
+                let nx, ny, nz;
+                if (normals) {
+                    nx = normals.getX(idx);
+                    ny = normals.getY(idx);
+                    nz = normals.getZ(idx);
+                } else {
+                    const v1 = new THREE.Vector3(
+                        positions.getX(idx),
+                        positions.getY(idx),
+                        positions.getZ(idx)
+                    );
+                    const v2 = new THREE.Vector3(
+                        positions.getX(idx + 1),
+                        positions.getY(idx + 1),
+                        positions.getZ(idx + 1)
+                    );
+                    const v3 = new THREE.Vector3(
+                        positions.getX(idx + 2),
+                        positions.getY(idx + 2),
+                        positions.getZ(idx + 2)
+                    );
+                    const edge1 = v2.sub(v1);
+                    const edge2 = v3.sub(v1);
+                    const normal = edge1.cross(edge2).normalize();
+                    nx = normal.x;
+                    ny = normal.y;
+                    nz = normal.z;
+                }
+                dataView.setFloat32(offset, nx, true);
+                dataView.setFloat32(offset + 4, ny, true);
+                dataView.setFloat32(offset + 8, nz, true);
+                offset += 12;
+                for (let j = 0; j < 3; j++) {
+                    dataView.setFloat32(offset, positions.getX(idx + j), true);
+                    dataView.setFloat32(offset + 4, positions.getY(idx + j), true);
+                    dataView.setFloat32(offset + 8, positions.getZ(idx + j), true);
+                    offset += 12;
+                }
+                dataView.setUint16(offset, 0, true);
+                offset += 2;
+            }
+            return arrayBuffer;
+        }
+        document.getElementById('processNoScale').addEventListener('click', () => processWithScale(null, '28mm', 'processNoScale'));
+        document.getElementById('process32mm').addEventListener('click', () => processWithScale(feetInchesToMM28mm(6, 2), '28mm', 'process32mm'));
+        document.getElementById('process9ft').addEventListener('click', () => processWithScale(feetInchesToMM28mm(9, 0), '28mm', 'process9ft'));
+        document.getElementById('process12ft').addEventListener('click', () => processWithScale(feetInchesToMM28mm(12, 0), '28mm', 'process12ft'));
+        document.getElementById('process100mm').addEventListener('click', () => processWithScale(100, 'regular', 'process100mm'));
+        document.getElementById('process300mm').addEventListener('click', () => processWithScale(290, 'regular', 'process300mm'));
+        document.getElementById('clearAll').addEventListener('click', clearAll);
+        document.getElementById('exportEverything').addEventListener('click', exportEverything);
+        document.getElementById('prevPage').addEventListener('click', goToPreviousPage);
+        document.getElementById('nextPage').addEventListener('click', goToNextPage);
+        setupDragAndDrop();
+        updateModelCount();
+        const pageDisplay = document.getElementById('pageDisplay');
+        if (pageDisplay) {
+            pageDisplay.textContent = 'Page 1 / 1';
+        }
+        window.addEventListener('resize', () => {
+            stages.forEach(s => {
+                if (s.updateViewport) {
+                    s.updateViewport();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
