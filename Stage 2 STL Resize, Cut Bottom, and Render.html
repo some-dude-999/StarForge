@@ -817,6 +817,96 @@
                 this.cutCubeLabel.position.set(0, this.groundY + this.cutHeight - cubeHeight - 5, 0);
                 this.scene.add(this.cutCubeLabel);
                 this.cutCubeLabel.visible = false;
+
+                // Add drag functionality for cut cube
+                this.setupCutCubeDragging();
+            }
+            setupCutCubeDragging() {
+                if (!this.renderer || !this.camera) return;
+
+                const raycaster = new THREE.Raycaster();
+                const mouse = new THREE.Vector2();
+                let isDragging = false;
+                let dragStartY = 0;
+                let cutHeightStart = 0;
+
+                const onMouseDown = (event) => {
+                    if (!this.cutModeEnabled || !this.cutCube || !this.cutCube.visible) return;
+
+                    const rect = this.renderer.domElement.getBoundingClientRect();
+                    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                    raycaster.setFromCamera(mouse, this.camera);
+                    const intersects = raycaster.intersectObject(this.cutCube);
+
+                    if (intersects.length > 0) {
+                        isDragging = true;
+                        dragStartY = event.clientY;
+                        cutHeightStart = this.cutHeight;
+                        this.renderer.domElement.style.cursor = 'grabbing';
+                        event.preventDefault();
+                    }
+                };
+
+                const onMouseMove = (event) => {
+                    if (!this.cutModeEnabled || !this.cutCube || !this.cutCube.visible) {
+                        this.renderer.domElement.style.cursor = 'default';
+                        return;
+                    }
+
+                    if (isDragging) {
+                        // Calculate drag distance (invert Y because screen Y is opposite to 3D Y)
+                        const deltaY = dragStartY - event.clientY;
+                        // Scale factor: adjust sensitivity (0.1 means 10 pixels = 1mm)
+                        const sensitivity = 0.1;
+                        const newHeight = Math.max(0.1, Math.min(50, cutHeightStart + deltaY * sensitivity));
+
+                        this.cutHeight = newHeight;
+                        this.updateCutCubeHeight(newHeight);
+
+                        // Update the UI display - find modelId from global models map
+                        models.forEach((modelData, modelId) => {
+                            if (modelData.stageIndex === this.index) {
+                                const valueSpan = document.getElementById(`cut-height-value-${modelId}`);
+                                if (valueSpan) {
+                                    valueSpan.textContent = `${newHeight.toFixed(1)}mm`;
+                                }
+                            }
+                        });
+                        event.preventDefault();
+                    } else {
+                        // Check if mouse is over cut cube to show grab cursor
+                        const rect = this.renderer.domElement.getBoundingClientRect();
+                        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+                        raycaster.setFromCamera(mouse, this.camera);
+                        const intersects = raycaster.intersectObject(this.cutCube);
+
+                        if (intersects.length > 0) {
+                            this.renderer.domElement.style.cursor = 'grab';
+                        } else {
+                            this.renderer.domElement.style.cursor = 'default';
+                        }
+                    }
+                };
+
+                const onMouseUp = () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        this.renderer.domElement.style.cursor = 'grab';
+                    }
+                };
+
+                // Attach event listeners
+                this.renderer.domElement.addEventListener('mousedown', onMouseDown);
+                this.renderer.domElement.addEventListener('mousemove', onMouseMove);
+                this.renderer.domElement.addEventListener('mouseup', onMouseUp);
+                this.renderer.domElement.addEventListener('mouseleave', onMouseUp);
+
+                // Store references for cleanup if needed
+                this.cutCubeDragHandlers = { onMouseDown, onMouseMove, onMouseUp };
             }
             updateCutCubeHeight(heightMM) {
                 this.cutHeight = heightMM;
@@ -2041,25 +2131,6 @@
                 stage.updateCamera();
             };
             controls.appendChild(zoomOutBtn);
-            const centerStlBtn = document.createElement('button');
-            centerStlBtn.className = 'btn-center';
-            centerStlBtn.textContent = 'Size View';
-            centerStlBtn.title = 'View with Man & Bars for Size Reference';
-            centerStlBtn.onclick = () => stage.fitAllModelsAndManInView();
-            controls.appendChild(centerStlBtn);
-            const centerAllBtn = document.createElement('button');
-            centerAllBtn.className = 'btn-center';
-            centerAllBtn.textContent = 'Render View';
-            centerAllBtn.title = 'Preview Export View (Tilted, Clean, No Man/Bars)';
-            centerAllBtn.onclick = () => stage.fitSTLOnlyInView();
-            controls.appendChild(centerAllBtn);
-            const downloadAllBtn = document.createElement('button');
-            downloadAllBtn.className = 'btn-download-all';
-            downloadAllBtn.id = `download-all-${modelId}`;
-            downloadAllBtn.textContent = '💾 Download (3)';
-            downloadAllBtn.title = 'Download JPG + PNG + STL (same filename)';
-            downloadAllBtn.onclick = () => downloadModelAndScreenshot(modelId);
-            controls.appendChild(downloadAllBtn);
             card.appendChild(controls);
             let initialHeightText;
             if (scaleMode === '28mm') {
@@ -2193,8 +2264,214 @@
             }
             modelHeightLabel.textContent = modelHeightText;
             viewport.appendChild(modelHeightLabel);
+
+            // Add canvas overlay controls (cut mode controls in top-left, download in bottom-right)
+            const canvasOverlay = document.createElement('div');
+            canvasOverlay.style.position = 'absolute';
+            canvasOverlay.style.top = '0';
+            canvasOverlay.style.left = '0';
+            canvasOverlay.style.right = '0';
+            canvasOverlay.style.bottom = '0';
+            canvasOverlay.style.pointerEvents = 'none';
+            canvasOverlay.style.zIndex = '10';
+
+            // Top-left: Cut mode checkbox and +/- controls
+            const topLeftControls = document.createElement('div');
+            topLeftControls.style.position = 'absolute';
+            topLeftControls.style.top = '10px';
+            topLeftControls.style.left = '10px';
+            topLeftControls.style.display = 'flex';
+            topLeftControls.style.flexDirection = 'column';
+            topLeftControls.style.gap = '5px';
+            topLeftControls.style.pointerEvents = 'auto';
+
+            // Cut Mode Checkbox
+            const cutModeCheckboxDiv = document.createElement('div');
+            cutModeCheckboxDiv.style.display = 'flex';
+            cutModeCheckboxDiv.style.alignItems = 'center';
+            cutModeCheckboxDiv.style.gap = '5px';
+            cutModeCheckboxDiv.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
+            cutModeCheckboxDiv.style.padding = '5px 8px';
+            cutModeCheckboxDiv.style.borderRadius = '5px';
+            cutModeCheckboxDiv.style.border = '2px solid #FF9800';
+
+            const cutModeCheckbox = document.createElement('input');
+            cutModeCheckbox.type = 'checkbox';
+            cutModeCheckbox.id = `cut-mode-${modelId}`;
+            cutModeCheckbox.style.width = '18px';
+            cutModeCheckbox.style.height = '18px';
+            cutModeCheckbox.style.cursor = 'pointer';
+            cutModeCheckbox.addEventListener('change', (e) => {
+                const stageIndex = models.get(modelId).stageIndex;
+                const stage = stages[stageIndex];
+                if (stage) {
+                    stage.toggleCutMode(e.target.checked);
+                    const cutHeightControls = document.getElementById(`cut-height-overlay-${modelId}`);
+                    if (cutHeightControls) {
+                        cutHeightControls.style.display = e.target.checked ? 'flex' : 'none';
+                    }
+                }
+            });
+            cutModeCheckboxDiv.appendChild(cutModeCheckbox);
+
+            const cutModeLabel = document.createElement('label');
+            cutModeLabel.setAttribute('for', `cut-mode-${modelId}`);
+            cutModeLabel.textContent = 'Cut Mode';
+            cutModeLabel.style.color = '#FF9800';
+            cutModeLabel.style.fontWeight = 'bold';
+            cutModeLabel.style.fontSize = '12px';
+            cutModeLabel.style.cursor = 'pointer';
+            cutModeLabel.style.userSelect = 'none';
+            cutModeCheckboxDiv.appendChild(cutModeLabel);
+            topLeftControls.appendChild(cutModeCheckboxDiv);
+
+            // Cut Height Adjuster (+/- buttons)
+            const cutHeightOverlay = document.createElement('div');
+            cutHeightOverlay.id = `cut-height-overlay-${modelId}`;
+            cutHeightOverlay.style.display = 'none';
+            cutHeightOverlay.style.flexDirection = 'row';
+            cutHeightOverlay.style.alignItems = 'center';
+            cutHeightOverlay.style.gap = '5px';
+            cutHeightOverlay.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
+            cutHeightOverlay.style.padding = '5px';
+            cutHeightOverlay.style.borderRadius = '5px';
+            cutHeightOverlay.style.border = '2px solid #FF9800';
+
+            const cutHeightDownBtn = document.createElement('button');
+            cutHeightDownBtn.textContent = '−';
+            cutHeightDownBtn.style.padding = '5px 10px';
+            cutHeightDownBtn.style.backgroundColor = '#FF9800';
+            cutHeightDownBtn.style.color = 'white';
+            cutHeightDownBtn.style.border = 'none';
+            cutHeightDownBtn.style.borderRadius = '3px';
+            cutHeightDownBtn.style.cursor = 'pointer';
+            cutHeightDownBtn.style.fontWeight = 'bold';
+            cutHeightDownBtn.onclick = () => {
+                const stageIndex = models.get(modelId).stageIndex;
+                const stage = stages[stageIndex];
+                if (stage) {
+                    stage.cutHeight = Math.max(0.1, stage.cutHeight - 0.1);
+                    stage.updateCutCubeHeight(stage.cutHeight);
+                    const valueSpan = document.getElementById(`cut-height-value-overlay-${modelId}`);
+                    if (valueSpan) {
+                        valueSpan.textContent = `${stage.cutHeight.toFixed(1)}mm`;
+                    }
+                }
+            };
+            cutHeightOverlay.appendChild(cutHeightDownBtn);
+
+            const cutHeightValueOverlay = document.createElement('span');
+            cutHeightValueOverlay.id = `cut-height-value-overlay-${modelId}`;
+            cutHeightValueOverlay.textContent = '0.1mm';
+            cutHeightValueOverlay.style.color = '#fff';
+            cutHeightValueOverlay.style.fontSize = '12px';
+            cutHeightValueOverlay.style.minWidth = '45px';
+            cutHeightValueOverlay.style.textAlign = 'center';
+            cutHeightValueOverlay.style.fontWeight = 'bold';
+            cutHeightOverlay.appendChild(cutHeightValueOverlay);
+
+            const cutHeightUpBtn = document.createElement('button');
+            cutHeightUpBtn.textContent = '+';
+            cutHeightUpBtn.style.padding = '5px 10px';
+            cutHeightUpBtn.style.backgroundColor = '#FF9800';
+            cutHeightUpBtn.style.color = 'white';
+            cutHeightUpBtn.style.border = 'none';
+            cutHeightUpBtn.style.borderRadius = '3px';
+            cutHeightUpBtn.style.cursor = 'pointer';
+            cutHeightUpBtn.style.fontWeight = 'bold';
+            cutHeightUpBtn.onclick = () => {
+                const stageIndex = models.get(modelId).stageIndex;
+                const stage = stages[stageIndex];
+                if (stage) {
+                    stage.cutHeight = Math.min(50, stage.cutHeight + 0.1);
+                    stage.updateCutCubeHeight(stage.cutHeight);
+                    const valueSpan = document.getElementById(`cut-height-value-overlay-${modelId}`);
+                    if (valueSpan) {
+                        valueSpan.textContent = `${stage.cutHeight.toFixed(1)}mm`;
+                    }
+                }
+            };
+            cutHeightOverlay.appendChild(cutHeightUpBtn);
+            topLeftControls.appendChild(cutHeightOverlay);
+            canvasOverlay.appendChild(topLeftControls);
+
+            // Bottom-right: Download button
+            const downloadBtn = document.createElement('button');
+            downloadBtn.id = `download-all-${modelId}`;
+            downloadBtn.textContent = '💾';
+            downloadBtn.title = 'Download JPG + PNG + STL';
+            downloadBtn.style.position = 'absolute';
+            downloadBtn.style.bottom = '10px';
+            downloadBtn.style.right = '10px';
+            downloadBtn.style.padding = '10px';
+            downloadBtn.style.backgroundColor = 'rgba(76, 175, 80, 0.9)';
+            downloadBtn.style.color = 'white';
+            downloadBtn.style.border = 'none';
+            downloadBtn.style.borderRadius = '5px';
+            downloadBtn.style.cursor = 'pointer';
+            downloadBtn.style.fontWeight = 'bold';
+            downloadBtn.style.fontSize = '16px';
+            downloadBtn.style.pointerEvents = 'auto';
+            downloadBtn.onclick = () => downloadModelAndScreenshot(modelId);
+            canvasOverlay.appendChild(downloadBtn);
+
+            viewport.appendChild(canvasOverlay);
             card.appendChild(viewport);
-            
+
+            // CUT MODE CONTROLS (Apply/Undo/Flatness) - ABOVE Z-ROTATION
+            const cutModeActionsContainer = document.createElement('div');
+            cutModeActionsContainer.className = 'cut-controls-container';
+            cutModeActionsContainer.style.marginTop = '10px';
+
+            // Apply Cut and Undo Buttons (side by side)
+            const cutButtonsRow = document.createElement('div');
+            cutButtonsRow.style.display = 'flex';
+            cutButtonsRow.style.gap = '8px';
+
+            const cutButton = document.createElement('button');
+            cutButton.id = `cut-button-${modelId}`;
+            cutButton.className = 'btn-cut';
+            cutButton.textContent = '✂️ Apply Cut';
+            cutButton.style.flex = '1';
+            cutButton.style.padding = '10px';
+            cutButton.style.backgroundColor = '#FF9800';
+            cutButton.style.color = 'white';
+            cutButton.style.border = 'none';
+            cutButton.style.borderRadius = '5px';
+            cutButton.style.cursor = 'pointer';
+            cutButton.style.fontWeight = 'bold';
+            cutButton.onclick = () => applyCutToModel(modelId);
+            cutButtonsRow.appendChild(cutButton);
+
+            const undoButton = document.createElement('button');
+            undoButton.id = `undo-cut-${modelId}`;
+            undoButton.className = 'btn-undo';
+            undoButton.textContent = '↩️ Undo';
+            undoButton.style.flex = '0.6';
+            undoButton.style.padding = '10px';
+            undoButton.style.backgroundColor = '#757575';
+            undoButton.style.color = 'white';
+            undoButton.style.border = 'none';
+            undoButton.style.borderRadius = '5px';
+            undoButton.style.cursor = 'pointer';
+            undoButton.style.fontWeight = 'bold';
+            undoButton.disabled = true;
+            undoButton.style.opacity = '0.5';
+            undoButton.onclick = () => undoCut(modelId);
+            cutButtonsRow.appendChild(undoButton);
+
+            cutModeActionsContainer.appendChild(cutButtonsRow);
+
+            // Flatness Status Display
+            const flatnessStatus = document.createElement('div');
+            flatnessStatus.id = `flatness-${modelId}`;
+            flatnessStatus.className = 'flatness-status';
+            flatnessStatus.textContent = '⚙️ Ready for Cut';
+            flatnessStatus.style.marginTop = '8px';
+            cutModeActionsContainer.appendChild(flatnessStatus);
+
+            card.appendChild(cutModeActionsContainer);
+
             // Z-AXIS ROTATION (BLUE) - Turntable/Floor Rotation - MOVED TO TOP
             // NOTE: This is actually Y-axis rotation in the 3D engine, but we call it Z-axis
             // because the viewer sees it as rotation on the floor (like a turntable), which
@@ -2277,133 +2554,6 @@
             xyRotationRow.appendChild(yRotationControls);
             
             card.appendChild(xyRotationRow);
-
-            // CUT MODE CONTROLS
-            const cutModeContainer = document.createElement('div');
-            cutModeContainer.className = 'cut-controls-container';
-            cutModeContainer.style.marginTop = '15px';
-
-            // Cut Mode Checkbox
-            const cutModeCheckboxDiv = document.createElement('div');
-            cutModeCheckboxDiv.className = 'cut-mode-checkbox';
-            const cutModeCheckbox = document.createElement('input');
-            cutModeCheckbox.type = 'checkbox';
-            cutModeCheckbox.id = `cut-mode-${modelId}`;
-            cutModeCheckbox.addEventListener('change', (e) => {
-                const stageIndex = models.get(modelId).stageIndex;
-                const stage = stages[stageIndex];
-                if (stage) {
-                    stage.toggleCutMode(e.target.checked);
-                    const cutHeightControls = document.getElementById(`cut-height-controls-${modelId}`);
-                    if (cutHeightControls) {
-                        if (e.target.checked) {
-                            cutHeightControls.classList.add('active');
-                        } else {
-                            cutHeightControls.classList.remove('active');
-                        }
-                    }
-                }
-            });
-            cutModeCheckboxDiv.appendChild(cutModeCheckbox);
-            const cutModeLabel = document.createElement('label');
-            cutModeLabel.setAttribute('for', `cut-mode-${modelId}`);
-            cutModeLabel.textContent = 'Enable Cut Mode';
-            cutModeCheckboxDiv.appendChild(cutModeLabel);
-            cutModeContainer.appendChild(cutModeCheckboxDiv);
-
-            // Cut Height Controls (initially hidden, shown when cut mode is enabled)
-            const cutHeightControls = document.createElement('div');
-            cutHeightControls.className = 'cut-height-controls';
-            cutHeightControls.id = `cut-height-controls-${modelId}`;
-
-            const cutHeightAdjuster = document.createElement('div');
-            cutHeightAdjuster.className = 'cut-height-adjuster';
-            cutHeightAdjuster.style.display = 'flex';
-            cutHeightAdjuster.style.alignItems = 'center';
-            cutHeightAdjuster.style.gap = '8px';
-            cutHeightAdjuster.style.justifyContent = 'center';
-
-            const cutHeightLabel = document.createElement('label');
-            cutHeightLabel.textContent = 'Cut Height:';
-            cutHeightLabel.style.color = '#FF9800';
-            cutHeightLabel.style.fontSize = '12px';
-            cutHeightLabel.style.fontWeight = 'bold';
-            cutHeightAdjuster.appendChild(cutHeightLabel);
-
-            const cutHeightDownBtn = document.createElement('button');
-            cutHeightDownBtn.textContent = '−';
-            cutHeightDownBtn.className = 'height-btn';
-            cutHeightDownBtn.style.backgroundColor = '#FF9800';
-            cutHeightDownBtn.onclick = () => {
-                const stageIndex = models.get(modelId).stageIndex;
-                const stage = stages[stageIndex];
-                if (stage) {
-                    stage.cutHeight = Math.max(0.1, stage.cutHeight - 0.5);
-                    stage.updateCutCubeHeight(stage.cutHeight);
-                    const valueSpan = document.getElementById(`cut-height-value-${modelId}`);
-                    if (valueSpan) {
-                        valueSpan.textContent = `${stage.cutHeight.toFixed(1)}mm`;
-                    }
-                }
-            };
-            cutHeightAdjuster.appendChild(cutHeightDownBtn);
-
-            const cutHeightValue = document.createElement('span');
-            cutHeightValue.id = `cut-height-value-${modelId}`;
-            cutHeightValue.textContent = '0.1mm';
-            cutHeightValue.style.color = '#fff';
-            cutHeightValue.style.fontSize = '14px';
-            cutHeightValue.style.minWidth = '50px';
-            cutHeightValue.style.textAlign = 'center';
-            cutHeightAdjuster.appendChild(cutHeightValue);
-
-            const cutHeightUpBtn = document.createElement('button');
-            cutHeightUpBtn.textContent = '+';
-            cutHeightUpBtn.className = 'height-btn';
-            cutHeightUpBtn.style.backgroundColor = '#FF9800';
-            cutHeightUpBtn.onclick = () => {
-                const stageIndex = models.get(modelId).stageIndex;
-                const stage = stages[stageIndex];
-                if (stage) {
-                    stage.cutHeight = Math.min(50, stage.cutHeight + 0.5);
-                    stage.updateCutCubeHeight(stage.cutHeight);
-                    const valueSpan = document.getElementById(`cut-height-value-${modelId}`);
-                    if (valueSpan) {
-                        valueSpan.textContent = `${stage.cutHeight.toFixed(1)}mm`;
-                    }
-                }
-            };
-            cutHeightAdjuster.appendChild(cutHeightUpBtn);
-
-            cutHeightControls.appendChild(cutHeightAdjuster);
-            cutModeContainer.appendChild(cutHeightControls);
-
-            // Apply Cut Button
-            const cutButton = document.createElement('button');
-            cutButton.id = `cut-button-${modelId}`;
-            cutButton.className = 'btn-cut';
-            cutButton.textContent = '✂️ Apply Flat Bottom Cut';
-            cutButton.style.width = '100%';
-            cutButton.style.marginTop = '8px';
-            cutButton.style.padding = '10px';
-            cutButton.style.backgroundColor = '#FF9800';
-            cutButton.style.color = 'white';
-            cutButton.style.border = 'none';
-            cutButton.style.borderRadius = '5px';
-            cutButton.style.cursor = 'pointer';
-            cutButton.style.fontWeight = 'bold';
-            cutButton.onclick = () => applyCut(modelId);
-            cutModeContainer.appendChild(cutButton);
-
-            // Flatness Status Display
-            const flatnessStatus = document.createElement('div');
-            flatnessStatus.id = `flatness-${modelId}`;
-            flatnessStatus.className = 'flatness-status';
-            flatnessStatus.textContent = '⚙️ Ready for Cut';
-            flatnessStatus.style.marginTop = '8px';
-            cutModeContainer.appendChild(flatnessStatus);
-
-            card.appendChild(cutModeContainer);
 
             document.getElementById('stages-container').appendChild(card);
             // Initialize stage and add model
@@ -2671,6 +2821,84 @@
                 }, 100);
             }
         }
+
+        // Store backup states for undo functionality
+        const cutBackupStates = new Map();
+
+        function undoCut(modelId) {
+            const backup = cutBackupStates.get(modelId);
+            if (!backup) {
+                alert('No cut to undo!');
+                return;
+            }
+
+            const modelData = models.get(modelId);
+            if (!modelData) return;
+
+            // Restore the original geometry
+            const oldGeometry = modelData.mesh.geometry;
+            modelData.mesh.geometry = backup.geometry.clone();
+            oldGeometry.dispose();
+
+            // Restore the original export geometry
+            const oldOriginalGeo = modelData.originalGeometry;
+            modelData.originalGeometry = backup.originalGeometry.clone();
+            oldOriginalGeo.dispose();
+
+            // Restore original dimensions and scale
+            modelData.originalHeight = backup.originalHeight;
+            modelData.originalMaxDimension = backup.originalMaxDimension;
+            modelData.scale = backup.scale;
+            modelData.rotationX = backup.rotationX;
+            modelData.rotationY = backup.rotationY;
+            modelData.rotationZ = backup.rotationZ;
+
+            // Restore mesh transformations
+            modelData.mesh.position.copy(backup.position);
+            modelData.mesh.rotation.set(backup.rotationX, backup.rotationY, backup.rotationZ);
+            modelData.mesh.scale.set(backup.scale, backup.scale, backup.scale);
+            modelData.mesh.updateMatrixWorld(true);
+
+            // Update stage
+            const stageIndex = modelData.stageIndex;
+            const stage = stages[stageIndex];
+            if (stage) {
+                stage.alignToGround(modelData.mesh);
+                stage.updateHeightLabel(modelId, modelData.mesh);
+                stage.recenterCurrentView();
+                stage.render();
+            }
+
+            // Update UI
+            updateAllUIForModel(modelId);
+
+            // Update flatness status
+            const flatnessEl = document.getElementById(`flatness-${modelId}`);
+            if (flatnessEl) {
+                flatnessEl.className = 'flatness-status';
+                flatnessEl.textContent = '⚙️ Ready for Cut';
+            }
+
+            // Update buttons
+            const cutButton = document.getElementById(`cut-button-${modelId}`);
+            if (cutButton) {
+                cutButton.textContent = '✂️ Apply Cut';
+                cutButton.disabled = false;
+                cutButton.style.backgroundColor = '#FF9800';
+            }
+
+            const undoButton = document.getElementById(`undo-cut-${modelId}`);
+            if (undoButton) {
+                undoButton.disabled = true;
+                undoButton.style.opacity = '0.5';
+            }
+
+            // Clear the backup
+            cutBackupStates.delete(modelId);
+
+            console.log('✅ Undo completed successfully!');
+        }
+
         async function applyCutToModel(modelId) {
             const modelData = models.get(modelId);
             if (!modelData) return;
@@ -2686,6 +2914,20 @@
                 cutButton.textContent = '⏳ Cutting... Please wait';
             }
             try {
+                // Save backup state before cutting
+                cutBackupStates.set(modelId, {
+                    geometry: modelData.mesh.geometry.clone(),
+                    originalGeometry: modelData.originalGeometry.clone(),
+                    originalHeight: modelData.originalHeight,
+                    originalMaxDimension: modelData.originalMaxDimension,
+                    scale: modelData.scale,
+                    rotationX: modelData.rotationX,
+                    rotationY: modelData.rotationY,
+                    rotationZ: modelData.rotationZ,
+                    position: modelData.mesh.position.clone()
+                });
+                console.log('💾 Backup state saved for undo');
+
                 await new Promise(resolve => setTimeout(resolve, 100));
                 const mesh = modelData.mesh;
                 const cutHeight = stage.groundY + stage.cutHeight;
@@ -2925,14 +3167,22 @@
                     }
                 }
                 if (cutButton) {
-                    cutButton.textContent = '✅ Cut Applied! (Cut Mode Closed)';
+                    cutButton.textContent = '✅ Cut Applied!';
                     cutButton.style.backgroundColor = '#4CAF50';
                     setTimeout(() => {
-                        cutButton.textContent = '✂️ Apply Flat Bottom Cut';
+                        cutButton.textContent = '✂️ Apply Cut';
                         cutButton.disabled = false;
-                        cutButton.style.backgroundColor = '';
+                        cutButton.style.backgroundColor = '#FF9800';
                     }, 3000);
                 }
+
+                // Enable undo button
+                const undoButton = document.getElementById(`undo-cut-${modelId}`);
+                if (undoButton) {
+                    undoButton.disabled = false;
+                    undoButton.style.opacity = '1';
+                }
+
                 console.log('Cut operation completed successfully!');
             } catch (error) {
                 console.error('Error during cut operation:', error);
