@@ -3389,12 +3389,15 @@
         function downloadModelAndScreenshot(modelId) {
             const modelData = models.get(modelId);
             if (!modelData) {
+                console.error('Download failed: model data not found for', modelId);
+                alert('Download failed: model data not found');
                 return;
             }
             const randomSuffix = generateRandomSuffix();
             const baseName = modelData.filename.replace(/\.stl$/i, '');
             const uniqueName = `${baseName}_${randomSuffix}`;
             const stageIndex = modelData.stageIndex;
+            console.log('Attempting download for model:', modelId, 'stageIndex:', stageIndex, 'stages.length:', stages.length);
             if (stages[stageIndex]) {
                 const originalViewMode = stages[stageIndex].viewMode;
                 stages[stageIndex].fitAllModelsAndManInView();
@@ -3413,7 +3416,9 @@
                         const screenshotLink = document.createElement('a');
                         screenshotLink.href = jpgData;
                         screenshotLink.download = `${uniqueName}.jpg`;
+                        document.body.appendChild(screenshotLink);
                         screenshotLink.click();
+                        document.body.removeChild(screenshotLink);
                     };
                     img.src = screenshotData;
                     setTimeout(() => {
@@ -3421,7 +3426,9 @@
                         const transparentLink = document.createElement('a');
                         transparentLink.href = transparentData;
                         transparentLink.download = `${uniqueName}.png`;
+                        document.body.appendChild(transparentLink);
                         transparentLink.click();
+                        document.body.removeChild(transparentLink);
                         setTimeout(() => {
                             const scaledGeometry = modelData.originalGeometry.clone();
                             scaledGeometry.scale(modelData.scale, modelData.scale, modelData.scale);
@@ -3431,8 +3438,10 @@
                             const modelLink = document.createElement('a');
                             modelLink.href = url;
                             modelLink.download = `${uniqueName}.stl`;
+                            document.body.appendChild(modelLink);
                             modelLink.click();
-                            URL.revokeObjectURL(url);
+                            document.body.removeChild(modelLink);
+                            setTimeout(() => URL.revokeObjectURL(url), 100);
                             if (originalViewMode === 'stl') {
                                 stages[stageIndex].fitSTLOnlyInView();
                             } else {
@@ -3441,6 +3450,9 @@
                         }, 1000);
                     }, 500);
                 }, 200);
+            } else {
+                console.error('Download failed: stage not found. stageIndex:', stageIndex, 'stages:', stages);
+                alert(`Download failed: stage not found (stageIndex: ${stageIndex}, stages.length: ${stages.length})`);
             }
         }
 
