@@ -1,0 +1,14 @@
+StarForge - Public GitHub Pages Tool Links
+===========================================
+
+Stage 1 STL Duplicate & Quality Checker
+https://some-dude-999.github.io/StarForge/Stage%201%20STL%20Duplicate%20%26%20Quality%20Checker.html
+
+Stage 1 STL Duplicate & Quality Checker QUICK START
+https://some-dude-999.github.io/StarForge/Stage%201%20STL%20Duplicate%20%26%20Quality%20Checker%20QUICK%20START.html
+
+Stage 2 STL Resize, Cut Bottom, and Render
+https://some-dude-999.github.io/StarForge/Stage%202%20STL%20Resize,%20Cut%20Bottom,%20and%20Render.html
+
+AUTO PRODUCT PHOTO COVER
+https://some-dude-999.github.io/StarForge/AUTO%20PRODUCT%20PHOTO%20COVER.html
