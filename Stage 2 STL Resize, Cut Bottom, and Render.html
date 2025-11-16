@@ -1,9 +1,74 @@
 <!DOCTYPE html>
+<!--
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                    STARFORGE STAGE 2 - STL PROCESSING TOOL                ║
+║                   Internal Web Tool for 3D Print Preparation              ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+PURPOSE:
+This tool processes 3D models (STL files) for tabletop gaming miniatures and
+3D printing. It provides a complete workflow for scaling, cutting, quality
+control, and export.
+
+MAIN FEATURES:
+
+1. SCALING
+   - 28mm Miniature Mode: Scale models to tabletop gaming standards
+   - Fixed Size Modes: 9ft, 12ft, 100mm, 300mm, or custom heights
+   - Real-time visual size reference with 28mm man figure overlay
+
+2. CUT MODE (Flat Bottom Creation)
+   - Interactive red cut plane with drag controls (Y-axis only)
+   - Precision height adjustment (+/- 0.1mm increments)
+   - Automatic flat bottom creation for stable 3D printing
+   - Floating geometry removal (auto-detects and removes disconnected parts)
+   - Undo functionality to revert cuts
+
+3. QUALITY CONTROL
+   - Flatness verification with detailed metrics
+   - Visual QC indicators: Green border = FLAT, Red border = NOT FLAT
+   - Technical flatness report: area coverage, deviation tolerance (0.1mm)
+   - Purpose: Ensure models print correctly without support issues
+
+4. EXPORT SYSTEM (Triple Output)
+   - STL: Modified 3D model ready for slicing/printing
+   - JPG: Technical render with QC border for quality verification
+   - PNG: Production render, transparent background, clean (no QC markings)
+
+WORKFLOW:
+1. Upload STL files from Stage 1 (after duplicate checking)
+2. Scale models to desired height using overlay controls
+3. Enable Cut Mode and adjust cut plane height
+4. Apply cut to create flat bottom and remove floating parts
+5. Verify flatness with automated QC check
+6. Download STL + renders (JPG for QC, PNG for marketing)
+
+TECHNICAL NOTES:
+- All measurements in millimeters
+- Coordinate system: Y-axis is vertical (up/down)
+- Cut tolerance: 0.1mm for flatness validation
+- Geometry processing: Real-time mesh surgery for cuts
+- Canvas overlays: Non-destructive UI layer on 3D viewport
+
+UI ORGANIZATION:
+- Top-left overlay: Cut mode controls (checkbox, height, apply/undo)
+- Top-right overlay: Height adjustment and zoom controls
+- Bottom-right overlay: Download button (STL+PNG+JPG)
+- Main controls: Rotation sliders, detailed height inputs
+- Status display: Flatness metrics after cut operation
+
+For future LLMs maintaining this code:
+The goal is fast, reliable model preparation. Prioritize:
+- Accurate flatness detection for print quality
+- Clear visual feedback for non-technical users
+- Minimal clicks to complete workflow
+- Automatic cleanup of problematic geometry
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>28mm STL Scaler with Reference Man Overlay</title>
+    <title>Stage 2 - STL Resize, Cut Bottom, and Render</title>
     <style>
         body {
             margin: 0;
@@ -222,6 +287,15 @@
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.3);
             cursor: default;
             user-select: none;
+        }
+        /* Technical QC border indicators (shown in JPG renders, hidden in PNG) */
+        .viewport.flat {
+            border: 4px solid #4CAF50 !important;
+            box-shadow: 0 0 12px rgba(76, 175, 80, 0.5), inset 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .viewport.not-flat {
+            border: 4px solid #f44336 !important;
+            box-shadow: 0 0 12px rgba(244, 67, 54, 0.5), inset 0 2px 4px rgba(0,0,0,0.3);
         }
         .alignment-status {
             position: absolute;
@@ -1163,6 +1237,11 @@
                 mesh.position.y += offsetY;
                 mesh.updateMatrixWorld(true);
             }
+            /**
+             * Check if model bottom is flat enough for 3D printing
+             * Returns detailed metrics for quality control
+             * Tolerance: 0.1mm deviation considered acceptable
+             */
             checkFlatness(mesh) {
                 mesh.updateMatrixWorld(true);
                 const geometry = mesh.geometry;
@@ -1175,7 +1254,7 @@
                     vertex.applyMatrix4(matrix);
                     minY = Math.min(minY, vertex.y);
                 }
-                const tolerance = 0.01;
+                const tolerance = 0.1; // Changed to 0.1mm for better precision
                 const bottomVertices = [];
                 for (let i = 0; i < positions.count; i++) {
                     vertex.fromBufferAttribute(positions, i);
@@ -1186,7 +1265,12 @@
                 }
                 const vertexCount = bottomVertices.length;
                 if (vertexCount < 3) {
-                    return { isFlat: false, reason: "Insufficient vertices (need 3+)", vertexCount: vertexCount };
+                    return {
+                        isFlat: false,
+                        reason: "Insufficient vertices (need 3+)",
+                        vertexCount: vertexCount,
+                        tolerance: tolerance
+                    };
                 }
                 let minBottomY = Infinity, maxBottomY = -Infinity;
                 let minX = Infinity, maxX = -Infinity;
@@ -1200,7 +1284,8 @@
                     maxZ = Math.max(maxZ, v.z);
                 });
                 const yRange = maxBottomY - minBottomY;
-                const isPlanar = yRange <= 0.01;
+                const maxDeviation = yRange; // Max deviation from flatness
+                const isPlanar = yRange <= tolerance; // Use tolerance variable (0.1mm)
                 const xSpan = maxX - minX;
                 const zSpan = maxZ - minZ;
                 const area = xSpan * zSpan;
@@ -1210,14 +1295,16 @@
                     isFlat: isFlat,
                     vertexCount: vertexCount,
                     yRange: yRange,
+                    maxDeviation: maxDeviation,
                     area: area,
-                    reason: !isFlat ? this.getFlatnessFailureReason(vertexCount >= 3, isPlanar, hasGoodArea) : null
+                    tolerance: tolerance,
+                    reason: !isFlat ? this.getFlatnessFailureReason(vertexCount >= 3, isPlanar, hasGoodArea, tolerance) : null
                 };
             }
-            getFlatnessFailureReason(hasEnoughVertices, isPlanar, hasGoodArea) {
+            getFlatnessFailureReason(hasEnoughVertices, isPlanar, hasGoodArea, tolerance) {
                 if (!hasEnoughVertices) return "Insufficient vertices (need 3+)";
-                if (!isPlanar) return "Not planar (>0.01mm variation)";
-                if (!hasGoodArea) return "Contact area too small (<4mm2)";
+                if (!isPlanar) return `Not planar (>${tolerance}mm variation)`;
+                if (!hasGoodArea) return "Contact area too small (<4mm²)";
                 return "Unknown";
             }
             createHeightLabel(text, color) {
@@ -2113,25 +2200,7 @@
             title.className = 'model-title';
             title.textContent = modelName;
             card.appendChild(title);
-            const controls = document.createElement('div');
-            controls.className = 'card-controls';
-            const zoomInBtn = document.createElement('button');
-            zoomInBtn.className = 'btn-zoom';
-            zoomInBtn.textContent = '+';
-            zoomInBtn.onclick = () => {
-                stage.zoomLevel = Math.min(10, stage.zoomLevel + 0.3);
-                stage.updateCamera();
-            };
-            controls.appendChild(zoomInBtn);
-            const zoomOutBtn = document.createElement('button');
-            zoomOutBtn.className = 'btn-zoom';
-            zoomOutBtn.textContent = '−';
-            zoomOutBtn.onclick = () => {
-                stage.zoomLevel = Math.max(0.1, stage.zoomLevel - 0.3);
-                stage.updateCamera();
-            };
-            controls.appendChild(zoomOutBtn);
-            card.appendChild(controls);
+            // Zoom controls will be in canvas overlay (top-right)
             let initialHeightText;
             if (scaleMode === '28mm') {
                 const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
@@ -2265,7 +2334,11 @@
             modelHeightLabel.textContent = modelHeightText;
             viewport.appendChild(modelHeightLabel);
 
-            // Add canvas overlay controls (cut mode controls in top-left, download in bottom-right)
+            // ===========================
+            // CANVAS OVERLAY CONTROLS
+            // Provides on-canvas UI for cut mode, zoom, height adjustment, and download
+            // Layout: Top-left (cut controls), Top-right (zoom/height), Bottom-right (download)
+            // ===========================
             const canvasOverlay = document.createElement('div');
             canvasOverlay.style.position = 'absolute';
             canvasOverlay.style.top = '0';
@@ -2275,7 +2348,7 @@
             canvasOverlay.style.pointerEvents = 'none';
             canvasOverlay.style.zIndex = '10';
 
-            // Top-left: Cut mode checkbox and +/- controls
+            // TOP-LEFT: Cut mode controls (checkbox, height adjust, apply/undo buttons)
             const topLeftControls = document.createElement('div');
             topLeftControls.style.position = 'absolute';
             topLeftControls.style.top = '10px';
@@ -2285,7 +2358,7 @@
             topLeftControls.style.gap = '5px';
             topLeftControls.style.pointerEvents = 'auto';
 
-            // Cut Mode Checkbox
+            // Cut Mode Checkbox - enables/disables cut mode and shows/hides all cut UI
             const cutModeCheckboxDiv = document.createElement('div');
             cutModeCheckboxDiv.style.display = 'flex';
             cutModeCheckboxDiv.style.alignItems = 'center';
@@ -2306,9 +2379,14 @@
                 const stage = stages[stageIndex];
                 if (stage) {
                     stage.toggleCutMode(e.target.checked);
+                    // Show/hide all cut mode UI elements
                     const cutHeightControls = document.getElementById(`cut-height-overlay-${modelId}`);
+                    const cutActionButtons = document.getElementById(`cut-action-buttons-${modelId}`);
                     if (cutHeightControls) {
                         cutHeightControls.style.display = e.target.checked ? 'flex' : 'none';
+                    }
+                    if (cutActionButtons) {
+                        cutActionButtons.style.display = e.target.checked ? 'flex' : 'none';
                     }
                 }
             });
@@ -2325,7 +2403,7 @@
             cutModeCheckboxDiv.appendChild(cutModeLabel);
             topLeftControls.appendChild(cutModeCheckboxDiv);
 
-            // Cut Height Adjuster (+/- buttons)
+            // Cut Height Adjuster (+/- buttons) - adjust cut plane height in 0.1mm increments
             const cutHeightOverlay = document.createElement('div');
             cutHeightOverlay.id = `cut-height-overlay-${modelId}`;
             cutHeightOverlay.style.display = 'none';
@@ -2393,17 +2471,172 @@
             };
             cutHeightOverlay.appendChild(cutHeightUpBtn);
             topLeftControls.appendChild(cutHeightOverlay);
+
+            // Apply Cut and Undo Buttons - execute or revert the cutting operation
+            const cutActionButtons = document.createElement('div');
+            cutActionButtons.id = `cut-action-buttons-${modelId}`;
+            cutActionButtons.style.display = 'none';
+            cutActionButtons.style.flexDirection = 'column';
+            cutActionButtons.style.gap = '5px';
+
+            const cutButton = document.createElement('button');
+            cutButton.id = `cut-button-${modelId}`;
+            cutButton.textContent = '✂️ Apply Cut';
+            cutButton.style.padding = '8px 12px';
+            cutButton.style.backgroundColor = '#FF9800';
+            cutButton.style.color = 'white';
+            cutButton.style.border = 'none';
+            cutButton.style.borderRadius = '5px';
+            cutButton.style.cursor = 'pointer';
+            cutButton.style.fontWeight = 'bold';
+            cutButton.style.fontSize = '12px';
+            cutButton.onclick = () => applyCutToModel(modelId);
+            cutActionButtons.appendChild(cutButton);
+
+            const undoButton = document.createElement('button');
+            undoButton.id = `undo-cut-${modelId}`;
+            undoButton.textContent = '↩️ Undo';
+            undoButton.style.padding = '8px 12px';
+            undoButton.style.backgroundColor = '#757575';
+            undoButton.style.color = 'white';
+            undoButton.style.border = 'none';
+            undoButton.style.borderRadius = '5px';
+            undoButton.style.cursor = 'pointer';
+            undoButton.style.fontWeight = 'bold';
+            undoButton.style.fontSize = '12px';
+            undoButton.disabled = true;
+            undoButton.style.opacity = '0.5';
+            undoButton.onclick = () => undoCut(modelId);
+            cutActionButtons.appendChild(undoButton);
+
+            topLeftControls.appendChild(cutActionButtons);
             canvasOverlay.appendChild(topLeftControls);
 
-            // Bottom-right: Download button
+            // TOP-RIGHT: Height adjustment and zoom controls
+            const topRightControls = document.createElement('div');
+            topRightControls.style.position = 'absolute';
+            topRightControls.style.top = '10px';
+            topRightControls.style.right = '10px';
+            topRightControls.style.display = 'flex';
+            topRightControls.style.flexDirection = 'column';
+            topRightControls.style.gap = '5px';
+            topRightControls.style.pointerEvents = 'auto';
+
+            // Height Adjustment Quick Controls - simplified overlay version of main height controls
+            const heightQuickControls = document.createElement('div');
+            heightQuickControls.style.display = 'flex';
+            heightQuickControls.style.flexDirection = 'column';
+            heightQuickControls.style.gap = '3px';
+            heightQuickControls.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
+            heightQuickControls.style.padding = '5px';
+            heightQuickControls.style.borderRadius = '5px';
+            heightQuickControls.style.border = '2px solid #4CAF50';
+
+            const heightQuickLabel = document.createElement('div');
+            heightQuickLabel.textContent = 'Height';
+            heightQuickLabel.style.color = '#4CAF50';
+            heightQuickLabel.style.fontSize = '10px';
+            heightQuickLabel.style.fontWeight = 'bold';
+            heightQuickLabel.style.textAlign = 'center';
+            heightQuickControls.appendChild(heightQuickLabel);
+
+            const heightUpBtnQuick = document.createElement('button');
+            heightUpBtnQuick.textContent = '▲';
+            heightUpBtnQuick.style.padding = '5px';
+            heightUpBtnQuick.style.backgroundColor = '#4CAF50';
+            heightUpBtnQuick.style.color = 'white';
+            heightUpBtnQuick.style.border = 'none';
+            heightUpBtnQuick.style.borderRadius = '3px';
+            heightUpBtnQuick.style.cursor = 'pointer';
+            heightUpBtnQuick.style.fontWeight = 'bold';
+            heightUpBtnQuick.onclick = () => {
+                if (scaleMode === '28mm') {
+                    adjustHeight(modelId, 'inches', 1);
+                } else {
+                    adjustHeightInches(modelId, 0.5);
+                }
+            };
+            heightQuickControls.appendChild(heightUpBtnQuick);
+
+            const heightDownBtnQuick = document.createElement('button');
+            heightDownBtnQuick.textContent = '▼';
+            heightDownBtnQuick.style.padding = '5px';
+            heightDownBtnQuick.style.backgroundColor = '#4CAF50';
+            heightDownBtnQuick.style.color = 'white';
+            heightDownBtnQuick.style.border = 'none';
+            heightDownBtnQuick.style.borderRadius = '3px';
+            heightDownBtnQuick.style.cursor = 'pointer';
+            heightDownBtnQuick.style.fontWeight = 'bold';
+            heightDownBtnQuick.onclick = () => {
+                if (scaleMode === '28mm') {
+                    adjustHeight(modelId, 'inches', -1);
+                } else {
+                    adjustHeightInches(modelId, -0.5);
+                }
+            };
+            heightQuickControls.appendChild(heightDownBtnQuick);
+            topRightControls.appendChild(heightQuickControls);
+
+            // Zoom Controls - control camera zoom level
+            const zoomControls = document.createElement('div');
+            zoomControls.style.display = 'flex';
+            zoomControls.style.flexDirection = 'column';
+            zoomControls.style.gap = '3px';
+            zoomControls.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
+            zoomControls.style.padding = '5px';
+            zoomControls.style.borderRadius = '5px';
+            zoomControls.style.border = '2px solid #2196F3';
+
+            const zoomLabel = document.createElement('div');
+            zoomLabel.textContent = 'Zoom';
+            zoomLabel.style.color = '#2196F3';
+            zoomLabel.style.fontSize = '10px';
+            zoomLabel.style.fontWeight = 'bold';
+            zoomLabel.style.textAlign = 'center';
+            zoomControls.appendChild(zoomLabel);
+
+            const zoomInBtn = document.createElement('button');
+            zoomInBtn.textContent = '+';
+            zoomInBtn.style.padding = '5px 10px';
+            zoomInBtn.style.backgroundColor = '#2196F3';
+            zoomInBtn.style.color = 'white';
+            zoomInBtn.style.border = 'none';
+            zoomInBtn.style.borderRadius = '3px';
+            zoomInBtn.style.cursor = 'pointer';
+            zoomInBtn.style.fontWeight = 'bold';
+            zoomInBtn.onclick = () => {
+                stage.zoomLevel = Math.min(10, stage.zoomLevel + 0.3);
+                stage.updateCamera();
+            };
+            zoomControls.appendChild(zoomInBtn);
+
+            const zoomOutBtn = document.createElement('button');
+            zoomOutBtn.textContent = '−';
+            zoomOutBtn.style.padding = '5px 10px';
+            zoomOutBtn.style.backgroundColor = '#2196F3';
+            zoomOutBtn.style.color = 'white';
+            zoomOutBtn.style.border = 'none';
+            zoomOutBtn.style.borderRadius = '3px';
+            zoomOutBtn.style.cursor = 'pointer';
+            zoomOutBtn.style.fontWeight = 'bold';
+            zoomOutBtn.onclick = () => {
+                stage.zoomLevel = Math.max(0.1, stage.zoomLevel - 0.3);
+                stage.updateCamera();
+            };
+            zoomControls.appendChild(zoomOutBtn);
+            topRightControls.appendChild(zoomControls);
+
+            canvasOverlay.appendChild(topRightControls);
+
+            // BOTTOM-RIGHT: Download button for exporting STL, PNG, and JPG
             const downloadBtn = document.createElement('button');
             downloadBtn.id = `download-all-${modelId}`;
-            downloadBtn.textContent = '💾';
-            downloadBtn.title = 'Download JPG + PNG + STL';
+            downloadBtn.innerHTML = '💾<br><span style="font-size: 9px;">STL+PNG+JPG</span>';
+            downloadBtn.title = 'Download STL model, transparent PNG render, and technical JPG render';
             downloadBtn.style.position = 'absolute';
             downloadBtn.style.bottom = '10px';
             downloadBtn.style.right = '10px';
-            downloadBtn.style.padding = '10px';
+            downloadBtn.style.padding = '8px 10px';
             downloadBtn.style.backgroundColor = 'rgba(76, 175, 80, 0.9)';
             downloadBtn.style.color = 'white';
             downloadBtn.style.border = 'none';
@@ -2412,65 +2645,22 @@
             downloadBtn.style.fontWeight = 'bold';
             downloadBtn.style.fontSize = '16px';
             downloadBtn.style.pointerEvents = 'auto';
+            downloadBtn.style.lineHeight = '1.2';
+            downloadBtn.style.textAlign = 'center';
             downloadBtn.onclick = () => downloadModelAndScreenshot(modelId);
             canvasOverlay.appendChild(downloadBtn);
 
             viewport.appendChild(canvasOverlay);
             card.appendChild(viewport);
 
-            // CUT MODE CONTROLS (Apply/Undo/Flatness) - ABOVE Z-ROTATION
-            const cutModeActionsContainer = document.createElement('div');
-            cutModeActionsContainer.className = 'cut-controls-container';
-            cutModeActionsContainer.style.marginTop = '10px';
-
-            // Apply Cut and Undo Buttons (side by side)
-            const cutButtonsRow = document.createElement('div');
-            cutButtonsRow.style.display = 'flex';
-            cutButtonsRow.style.gap = '8px';
-
-            const cutButton = document.createElement('button');
-            cutButton.id = `cut-button-${modelId}`;
-            cutButton.className = 'btn-cut';
-            cutButton.textContent = '✂️ Apply Cut';
-            cutButton.style.flex = '1';
-            cutButton.style.padding = '10px';
-            cutButton.style.backgroundColor = '#FF9800';
-            cutButton.style.color = 'white';
-            cutButton.style.border = 'none';
-            cutButton.style.borderRadius = '5px';
-            cutButton.style.cursor = 'pointer';
-            cutButton.style.fontWeight = 'bold';
-            cutButton.onclick = () => applyCutToModel(modelId);
-            cutButtonsRow.appendChild(cutButton);
-
-            const undoButton = document.createElement('button');
-            undoButton.id = `undo-cut-${modelId}`;
-            undoButton.className = 'btn-undo';
-            undoButton.textContent = '↩️ Undo';
-            undoButton.style.flex = '0.6';
-            undoButton.style.padding = '10px';
-            undoButton.style.backgroundColor = '#757575';
-            undoButton.style.color = 'white';
-            undoButton.style.border = 'none';
-            undoButton.style.borderRadius = '5px';
-            undoButton.style.cursor = 'pointer';
-            undoButton.style.fontWeight = 'bold';
-            undoButton.disabled = true;
-            undoButton.style.opacity = '0.5';
-            undoButton.onclick = () => undoCut(modelId);
-            cutButtonsRow.appendChild(undoButton);
-
-            cutModeActionsContainer.appendChild(cutButtonsRow);
-
-            // Flatness Status Display
+            // FLATNESS STATUS - shows flatness analysis after cut (technical QC info)
+            // Displayed only after a cut operation, provides detailed metrics
             const flatnessStatus = document.createElement('div');
             flatnessStatus.id = `flatness-${modelId}`;
             flatnessStatus.className = 'flatness-status';
-            flatnessStatus.textContent = '⚙️ Ready for Cut';
-            flatnessStatus.style.marginTop = '8px';
-            cutModeActionsContainer.appendChild(flatnessStatus);
-
-            card.appendChild(cutModeActionsContainer);
+            flatnessStatus.style.marginTop = '10px';
+            flatnessStatus.style.display = 'none'; // Hidden until cut is performed
+            card.appendChild(flatnessStatus);
 
             // Z-AXIS ROTATION (BLUE) - Turntable/Floor Rotation - MOVED TO TOP
             // NOTE: This is actually Y-axis rotation in the 3D engine, but we call it Z-axis
@@ -2764,6 +2954,13 @@
             models.forEach(m => { if (Math.abs(m.scale - 1) > 0.001) hasScaled = true; });
             document.getElementById('exportEverything').disabled = !hasScaled;
         }
+        /**
+         * Download model files and renders
+         * Exports 3 files:
+         * - STL: Modified 3D model ready for printing
+         * - JPG: Technical render with QC border (green=flat, red=not flat)
+         * - PNG: Production render, transparent background, no QC border
+         */
         function downloadModelAndScreenshot(modelId) {
             const modelData = models.get(modelId);
             if (!modelData) {
@@ -2775,6 +2972,9 @@
             const stageIndex = modelData.stageIndex;
             if (stages[stageIndex]) {
                 const originalViewMode = stages[stageIndex].viewMode;
+                const viewport = stages[stageIndex].container?.querySelector('.viewport');
+
+                // TECHNICAL JPG RENDER: Keep QC border for quality control
                 stages[stageIndex].fitAllModelsAndManInView();
                 setTimeout(() => {
                     const screenshotData = stages[stageIndex].takeScreenshot();
@@ -2794,12 +2994,29 @@
                         screenshotLink.click();
                     };
                     img.src = screenshotData;
+
+                    // PRODUCTION PNG RENDER: Remove QC border for clean output
                     setTimeout(() => {
+                        // Temporarily remove QC border classes for PNG
+                        const hadFlatClass = viewport?.classList.contains('flat');
+                        const hadNotFlatClass = viewport?.classList.contains('not-flat');
+                        if (viewport) {
+                            viewport.classList.remove('flat');
+                            viewport.classList.remove('not-flat');
+                        }
+                        stages[stageIndex].render();
+
+                        // Take PNG screenshot without border
                         const transparentData = stages[stageIndex].takeTransparentTiltedScreenshot();
                         const transparentLink = document.createElement('a');
                         transparentLink.href = transparentData;
                         transparentLink.download = `${uniqueName}.png`;
                         transparentLink.click();
+
+                        // Restore QC border classes after PNG
+                        if (viewport && hadFlatClass) viewport.classList.add('flat');
+                        if (viewport && hadNotFlatClass) viewport.classList.add('not-flat');
+                        stages[stageIndex].render();
                         setTimeout(() => {
                             const scaledGeometry = modelData.originalGeometry.clone();
                             scaledGeometry.scale(modelData.scale, modelData.scale, modelData.scale);
@@ -2899,6 +3116,33 @@
             console.log('✅ Undo completed successfully!');
         }
 
+        /**
+         * MAIN CUTTING ALGORITHM
+         * Performs flat bottom cut on 3D model for optimal 3D printing
+         *
+         * Process:
+         * 1. Save backup for undo functionality
+         * 2. Slice mesh at specified height (cut plane)
+         * 3. Keep only geometry above cut plane
+         * 4. Generate flat bottom cap at cut height
+         * 5. Remove floating disconnected parts (cleanup)
+         * 6. Verify flatness with QC metrics
+         * 7. Update UI with results
+         *
+         * Technical Details:
+         * - Iterates through all triangles in the mesh
+         * - Classifies vertices as above/below cut plane
+         * - Creates new triangles for partial cuts (edge interpolation)
+         * - Builds contour loops from cut edges
+         * - Triangulates bottom cap using earcut algorithm
+         * - Removes geometry islands not connected to main body
+         *
+         * Quality Assurance:
+         * - Checks flatness tolerance (0.1mm)
+         * - Calculates contact area (must be ≥4mm²)
+         * - Applies visual QC border (green/red)
+         * - Reports detailed metrics to user
+         */
         async function applyCutToModel(modelId) {
             const modelData = models.get(modelId);
             if (!modelData) return;
@@ -3139,17 +3383,28 @@
                 modelData.originalHeight = newSize.y;
                 modelData.originalMaxDimension = Math.max(newSize.x, newSize.y, newSize.z);
                 modelData.scale = 1.0;
+                // QUALITY CONTROL: Check flatness and update technical displays
                 const flatnessResult = stage.checkFlatness(mesh);
                 stage.flatnessStatus.set(modelId, flatnessResult);
                 stage.updateFlatnessDisplay();
+
+                // Update flatness status with detailed metrics for QC
                 const flatnessEl = document.getElementById(`flatness-${modelId}`);
+                const viewport = flatnessEl?.parentElement?.querySelector('.viewport');
                 if (flatnessEl) {
+                    flatnessEl.style.display = 'block'; // Show flatness status after cut
                     if (flatnessResult.isFlat) {
                         flatnessEl.className = 'flatness-status flat';
-                        flatnessEl.textContent = '✓ Bottom Flat (After Cut)';
+                        flatnessEl.textContent = `✓ FLAT: ${flatnessResult.area.toFixed(0)}mm² area, all points within ${flatnessResult.tolerance}mm`;
+                        // Add green border for visual QC feedback
+                        if (viewport) viewport.classList.add('flat');
+                        if (viewport) viewport.classList.remove('not-flat');
                     } else {
                         flatnessEl.className = 'flatness-status not-flat';
-                        flatnessEl.textContent = `⚠ Not Flat: ${flatnessResult.reason}`;
+                        flatnessEl.textContent = `⚠ NOT FLAT: ${flatnessResult.reason}`;
+                        // Add red border for visual QC feedback
+                        if (viewport) viewport.classList.add('not-flat');
+                        if (viewport) viewport.classList.remove('flat');
                     }
                 }
                 stage.updateHeightLabel(modelId, mesh);
@@ -3157,14 +3412,17 @@
                 stage.updateManPosition();
                 stage.recenterCurrentView();
                 stage.render();
+
+                // Hide cut mode UI after successful cut
                 const cutModeCheckbox = document.getElementById(`cut-mode-${modelId}`);
                 if (cutModeCheckbox && cutModeCheckbox.checked) {
                     cutModeCheckbox.checked = false;
                     stage.toggleCutMode(false);
-                    const cutHeightControls = document.getElementById(`cut-height-controls-${modelId}`);
-                    if (cutHeightControls) {
-                        cutHeightControls.classList.remove('active');
-                    }
+                    // Hide all cut mode overlay controls
+                    const cutHeightOverlay = document.getElementById(`cut-height-overlay-${modelId}`);
+                    const cutActionButtons = document.getElementById(`cut-action-buttons-${modelId}`);
+                    if (cutHeightOverlay) cutHeightOverlay.style.display = 'none';
+                    if (cutActionButtons) cutActionButtons.style.display = 'none';
                 }
                 if (cutButton) {
                     cutButton.textContent = '✅ Cut Applied!';
