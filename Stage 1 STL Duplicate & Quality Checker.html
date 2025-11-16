@@ -1110,20 +1110,13 @@
         function updateTableHighlighting() {
             // Get all duplicate groups
             const duplicateGroups = new Map();
-            
+
             modelData.forEach(model => {
                 if (!model.isDuplicate) return;
                 if (badFiles.has(model.filename)) return;
                 if (markedDuplicates.has(model.filename)) return;
-                
-                // Group by size matches
-                const sizeKey = `size_${model.filesize}`;
-                if (!duplicateGroups.has(sizeKey)) {
-                    duplicateGroups.set(sizeKey, []);
-                }
-                duplicateGroups.get(sizeKey).push(model);
-                
-                // Group by name matches
+
+                // Group by name matches only
                 const nameKey = `name_${model.normalizedName}`;
                 if (!duplicateGroups.has(nameKey)) {
                     duplicateGroups.set(nameKey, []);
@@ -1388,6 +1381,83 @@
             name = name.replace(/[^a-zA-Z]/g, '').trim();
             return name.toLowerCase();
         }
+
+        // Compare two images pixel by pixel
+        async function compareImages(dataURL1, dataURL2, threshold = 0.05) {
+            return new Promise((resolve) => {
+                const canvas1 = document.createElement('canvas');
+                const canvas2 = document.createElement('canvas');
+                const ctx1 = canvas1.getContext('2d');
+                const ctx2 = canvas2.getContext('2d');
+
+                const img1 = new Image();
+                const img2 = new Image();
+
+                let loaded = 0;
+                const checkLoaded = () => {
+                    loaded++;
+                    if (loaded === 2) {
+                        // Set canvas sizes
+                        canvas1.width = img1.width;
+                        canvas1.height = img1.height;
+                        canvas2.width = img2.width;
+                        canvas2.height = img2.height;
+
+                        // Draw images
+                        ctx1.drawImage(img1, 0, 0);
+                        ctx2.drawImage(img2, 0, 0);
+
+                        // Get pixel data
+                        const data1 = ctx1.getImageData(0, 0, canvas1.width, canvas1.height).data;
+                        const data2 = ctx2.getImageData(0, 0, canvas2.width, canvas2.height).data;
+
+                        // Quick check: if sizes don't match, they're different
+                        if (data1.length !== data2.length) {
+                            resolve(false);
+                            return;
+                        }
+
+                        // Compare pixels with tolerance for JPEG compression
+                        let diffPixels = 0;
+                        const totalPixels = data1.length / 4; // 4 values per pixel (RGBA)
+
+                        for (let i = 0; i < data1.length; i += 4) {
+                            const r1 = data1[i];
+                            const g1 = data1[i + 1];
+                            const b1 = data1[i + 2];
+
+                            const r2 = data2[i];
+                            const g2 = data2[i + 1];
+                            const b2 = data2[i + 2];
+
+                            // Calculate color difference (simple Euclidean distance)
+                            const diff = Math.sqrt(
+                                Math.pow(r1 - r2, 2) +
+                                Math.pow(g1 - g2, 2) +
+                                Math.pow(b1 - b2, 2)
+                            );
+
+                            // If difference is more than threshold (0-441 range for RGB), count as different
+                            if (diff > 10) { // ~2% difference tolerance per channel
+                                diffPixels++;
+                            }
+                        }
+
+                        // Calculate similarity percentage
+                        const diffPercentage = diffPixels / totalPixels;
+
+                        // Images are considered duplicates if less than threshold% of pixels are different
+                        resolve(diffPercentage < threshold);
+                    }
+                };
+
+                img1.onload = checkLoaded;
+                img2.onload = checkLoaded;
+                img1.src = dataURL1;
+                img2.src = dataURL2;
+            });
+        }
+
         function formatFileSize(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024;
@@ -1459,17 +1529,8 @@
                 }))
             ];
             const duplicateGroups = new Map();
-            const sizeGroups = new Map();
             const nameGroups = new Map();
-            
-            // Group by exact file size
-            for (let info of allFileInfo) {
-                if (!sizeGroups.has(info.filesize)) {
-                    sizeGroups.set(info.filesize, []);
-                }
-                sizeGroups.get(info.filesize).push(info);
-            }
-            
+
             // Group by normalized name (letters only)
             for (let info of allFileInfo) {
                 if (!nameGroups.has(info.normalizedName)) {
@@ -1477,19 +1538,12 @@
                 }
                 nameGroups.get(info.normalizedName).push(info);
             }
-            
+
             // Mark as duplicate if EITHER:
-            // 1. Exact same file size (byte-for-byte match)
-            // 2. Same normalized name (letters only match)
+            // 1. Same normalized name (letters only match)
+            // 2. Render image pixel match (checked later after screenshots are generated)
             const duplicateFilenames = new Set();
-            
-            // Check file size duplicates
-            sizeGroups.forEach((group) => {
-                if (group.length > 1) {
-                    group.forEach(info => duplicateFilenames.add(info.filename));
-                }
-            });
-            
+
             // Check name duplicates
             nameGroups.forEach((group) => {
                 if (group.length > 1) {
@@ -1533,36 +1587,48 @@
                     const screenshot = await renderModelToCanvas(geometry);
                     geometry.dispose();
                     
+                    // Check for pixel duplicates against all existing models
+                    let pixelMatch = null;
+                    for (let existingModel of modelData) {
+                        if (existingModel.filename !== info.filename && existingModel.screenshot) {
+                            const imagesMatch = await compareImages(screenshot, existingModel.screenshot);
+                            if (imagesMatch) {
+                                pixelMatch = existingModel;
+                                break;
+                            }
+                        }
+                    }
+
                     const modelInfo = {
                         file: info.file,
                         filename: info.filename,
                         filesize: info.filesize,
                         screenshot: screenshot,
                         normalizedName: info.normalizedName,
-                        isDuplicate: info.isDuplicate
+                        isDuplicate: info.isDuplicate || pixelMatch !== null
                     };
-                    
+
                     modelData.push(modelInfo);
-                    
+
                     if (!markedDuplicates.has(modelInfo.filename)) {
                         addModelToTable(modelInfo);
                     }
-                    
+
                     if (autoMarkEnabled && modelInfo.isDuplicate) {
-                        // Find duplicates by EITHER size OR name
-                        const sizeMatches = modelData.filter(m => 
-                            m.filesize === modelInfo.filesize && m.filename !== modelInfo.filename
-                        );
-                        const nameMatches = modelData.filter(m => 
+                        // Find duplicates by EITHER name OR pixel match
+                        const nameMatches = modelData.filter(m =>
                             m.normalizedName === modelInfo.normalizedName && m.filename !== modelInfo.filename
                         );
-                        
-                        // Combine both matches and find the first one alphabetically
-                        const allMatches = [...new Set([...sizeMatches, ...nameMatches])];
-                        allMatches.sort((a, b) => a.filename.localeCompare(b.filename));
-                        
-                        if (allMatches.length > 0) {
-                            markAsDuplicate(modelInfo.filename, allMatches[0].filename);
+
+                        // If we found a pixel match, add it to matches
+                        const allMatches = pixelMatch ? [pixelMatch, ...nameMatches] : nameMatches;
+
+                        // Remove duplicates and sort alphabetically
+                        const uniqueMatches = [...new Set(allMatches)];
+                        uniqueMatches.sort((a, b) => a.filename.localeCompare(b.filename));
+
+                        if (uniqueMatches.length > 0) {
+                            markAsDuplicate(modelInfo.filename, uniqueMatches[0].filename);
                         }
                     }
                     
@@ -1741,22 +1807,30 @@
             
             tbody.appendChild(row);
         }
-        function toggleMarkDuplicate(model) {
+        async function toggleMarkDuplicate(model) {
             if (markedDuplicates.has(model.filename)) {
                 unmarkDuplicate(model.filename);
             } else {
-                // Find duplicates by EITHER size OR name
-                const sizeMatches = modelData.filter(m => 
-                    m.filesize === model.filesize && m.filename !== model.filename && m.isDuplicate
-                );
-                const nameMatches = modelData.filter(m => 
+                // Find duplicates by EITHER name OR pixel match
+                const nameMatches = modelData.filter(m =>
                     m.normalizedName === model.normalizedName && m.filename !== model.filename && m.isDuplicate
                 );
-                
+
+                // Check for pixel matches
+                const pixelMatches = [];
+                for (let m of modelData) {
+                    if (m.filename !== model.filename && m.isDuplicate && m.screenshot && model.screenshot) {
+                        const imagesMatch = await compareImages(model.screenshot, m.screenshot);
+                        if (imagesMatch) {
+                            pixelMatches.push(m);
+                        }
+                    }
+                }
+
                 // Combine both matches and find the first one alphabetically
-                const allMatches = [...new Set([...sizeMatches, ...nameMatches])];
+                const allMatches = [...new Set([...nameMatches, ...pixelMatches])];
                 allMatches.sort((a, b) => a.filename.localeCompare(b.filename));
-                
+
                 if (allMatches.length > 0) {
                     markAsDuplicate(model.filename, allMatches[0].filename);
                 }
