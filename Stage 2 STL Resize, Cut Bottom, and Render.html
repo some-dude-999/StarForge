@@ -646,10 +646,6 @@
         <button class="btn-all" id="exportEverything" disabled>💾 Download All</button>
         <div class="divider"></div>
         <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
-            <input type="checkbox" id="globalRemoveFloating" checked style="width: 16px; height: 16px; cursor: pointer;">
-            <span style="color: #4CAF50; font-weight: bold;">🧹 Remove Floating Parts</span>
-        </label>
-        <label style="display: flex; align-items: center; gap: 4px; font-size: 11px; cursor: pointer;">
             <input type="checkbox" id="debugBoundingBox" style="width: 16px; height: 16px; cursor: pointer;">
             <span style="color: #FFD700; font-weight: bold;">📦 Debug Bounding Box</span>
         </label>
@@ -1929,6 +1925,136 @@
             }
             return cleanGeometry;
         }
+
+        // Fix normals function - similar to Blender's Shift+N (Recalculate Normals Outside)
+        function fixNormals(geometry) {
+            console.log('🔧 Fixing normals...');
+
+            // First, ensure we have position data
+            const positions = geometry.attributes.position;
+            if (!positions) {
+                console.warn('⚠️ No position data found');
+                return geometry;
+            }
+
+            const triangleCount = positions.count / 3;
+            if (triangleCount === 0) {
+                return geometry;
+            }
+
+            // Build adjacency information (which triangles share edges)
+            const vertexToTriangles = new Map();
+            for (let i = 0; i < triangleCount; i++) {
+                for (let j = 0; j < 3; j++) {
+                    const vertexIndex = i * 3 + j;
+                    const x = positions.getX(vertexIndex);
+                    const y = positions.getY(vertexIndex);
+                    const z = positions.getZ(vertexIndex);
+                    const key = `${x.toFixed(6)},${y.toFixed(6)},${z.toFixed(6)}`;
+                    if (!vertexToTriangles.has(key)) {
+                        vertexToTriangles.set(key, []);
+                    }
+                    vertexToTriangles.get(key).push(i);
+                }
+            }
+
+            // Calculate center of mass to determine "outside" direction
+            let centerX = 0, centerY = 0, centerZ = 0;
+            for (let i = 0; i < positions.count; i++) {
+                centerX += positions.getX(i);
+                centerY += positions.getY(i);
+                centerZ += positions.getZ(i);
+            }
+            centerX /= positions.count;
+            centerY /= positions.count;
+            centerZ /= positions.count;
+
+            // For each triangle, check if normal points outward from center
+            // If not, flip the triangle vertices
+            const newVertices = [];
+            let flippedCount = 0;
+
+            for (let i = 0; i < triangleCount; i++) {
+                const i0 = i * 3;
+                const i1 = i * 3 + 1;
+                const i2 = i * 3 + 2;
+
+                // Get triangle vertices
+                const v0x = positions.getX(i0);
+                const v0y = positions.getY(i0);
+                const v0z = positions.getZ(i0);
+
+                const v1x = positions.getX(i1);
+                const v1y = positions.getY(i1);
+                const v1z = positions.getZ(i1);
+
+                const v2x = positions.getX(i2);
+                const v2y = positions.getY(i2);
+                const v2z = positions.getZ(i2);
+
+                // Calculate triangle center
+                const triCenterX = (v0x + v1x + v2x) / 3;
+                const triCenterY = (v0y + v1y + v2y) / 3;
+                const triCenterZ = (v0z + v1z + v2z) / 3;
+
+                // Calculate face normal using cross product
+                const e1x = v1x - v0x;
+                const e1y = v1y - v0y;
+                const e1z = v1z - v0z;
+
+                const e2x = v2x - v0x;
+                const e2y = v2y - v0y;
+                const e2z = v2z - v0z;
+
+                const normalX = e1y * e2z - e1z * e2y;
+                const normalY = e1z * e2x - e1x * e2z;
+                const normalZ = e1x * e2y - e1y * e2x;
+
+                // Vector from mesh center to triangle center
+                const outwardX = triCenterX - centerX;
+                const outwardY = triCenterY - centerY;
+                const outwardZ = triCenterZ - centerZ;
+
+                // Dot product to check if normal points outward
+                const dotProduct = normalX * outwardX + normalY * outwardY + normalZ * outwardZ;
+
+                // If dot product is negative, normal points inward - flip the triangle
+                if (dotProduct < 0) {
+                    // Flip by reversing vertex order (swap v1 and v2)
+                    newVertices.push(v0x, v0y, v0z);
+                    newVertices.push(v2x, v2y, v2z);
+                    newVertices.push(v1x, v1y, v1z);
+                    flippedCount++;
+                } else {
+                    // Keep original order
+                    newVertices.push(v0x, v0y, v0z);
+                    newVertices.push(v1x, v1y, v1z);
+                    newVertices.push(v2x, v2y, v2z);
+                }
+            }
+
+            if (flippedCount > 0) {
+                console.log(`🔧 Fixed ${flippedCount} inverted normals out of ${triangleCount} triangles`);
+
+                // Create new geometry with corrected vertex order
+                const fixedGeometry = new THREE.BufferGeometry();
+                fixedGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(newVertices), 3));
+
+                // Recompute normals with correct face orientation
+                fixedGeometry.computeVertexNormals();
+                fixedGeometry.computeBoundingBox();
+
+                return fixedGeometry;
+            } else {
+                console.log('✅ All normals already correctly oriented');
+
+                // Just recompute normals to ensure they're fresh
+                geometry.computeVertexNormals();
+
+                return geometry;
+            }
+        }
+
         function parseSTL(buffer) {
             try {
                 const dataView = new DataView(buffer);
@@ -2393,14 +2519,20 @@
                         if (!geometry || geometry.attributes.position.count === 0) {
                             continue;
                         }
-                        const globalRemoveFloating = document.getElementById('globalRemoveFloating');
-                        if (globalRemoveFloating && globalRemoveFloating.checked) {
-                            const cleanedGeometry = removeFloatingParts(geometry);
-                            if (cleanedGeometry !== geometry) {
-                                geometry.dispose();
-                                geometry = cleanedGeometry;
-                            }
+                        // Always remove floating parts (no user control)
+                        const cleanedGeometry = removeFloatingParts(geometry);
+                        if (cleanedGeometry !== geometry) {
+                            geometry.dispose();
+                            geometry = cleanedGeometry;
                         }
+
+                        // Always fix normals (like Blender's Shift+N)
+                        const fixedGeometry = fixNormals(geometry);
+                        if (fixedGeometry !== geometry) {
+                            geometry.dispose();
+                            geometry = fixedGeometry;
+                        }
+
                         geometry.rotateX(-Math.PI / 2);
                         geometry.center();
                         geometry.computeBoundingBox();
@@ -3009,12 +3141,12 @@
             flatnessStatusDiv.textContent = '⚙️ Ready for Cut';
             card.appendChild(flatnessStatusDiv);
 
-            // Hidden checkbox for remove floating parts (defaults to false)
+            // Hidden checkbox for remove floating parts (always checked)
             // This controls whether floating parts are removed during cut operation
             const removeFloatingCheckbox = document.createElement('input');
             removeFloatingCheckbox.type = 'checkbox';
             removeFloatingCheckbox.id = `remove-floating-${modelId}`;
-            removeFloatingCheckbox.checked = false; // Default to false - don't remove floating parts on cut
+            removeFloatingCheckbox.checked = true; // Always true - always remove floating parts on cut
             removeFloatingCheckbox.style.display = 'none'; // Hidden from user
             card.appendChild(removeFloatingCheckbox);
 
@@ -3816,6 +3948,14 @@
                         resultGeometry.dispose();
                     }
                 }
+
+                // Always fix normals after cut (like Blender's Shift+N)
+                const fixedGeometry = fixNormals(finalGeometry);
+                if (fixedGeometry !== finalGeometry) {
+                    finalGeometry.dispose();
+                    finalGeometry = fixedGeometry;
+                }
+
                 const oldGeometry = mesh.geometry;
                 mesh.geometry = finalGeometry;
                 mesh.position.set(0, 0, 0);
