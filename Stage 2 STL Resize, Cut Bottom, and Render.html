@@ -194,6 +194,44 @@
             font-size: 14px;
             margin-top: 10px;
         }
+        .toast-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px 40px;
+            border-radius: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 10000;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+            animation: toast-slide-in 0.5s ease-out, toast-slide-out 0.5s ease-in 2.5s;
+            pointer-events: none;
+            text-align: center;
+            border: 3px solid rgba(255,255,255,0.3);
+        }
+        @keyframes toast-slide-in {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+        @keyframes toast-slide-out {
+            from {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(0.8);
+            }
+        }
         #stages-container {
             margin-top: 15px;
             display: grid;
@@ -813,6 +851,19 @@
                 loadingMessage.textContent = message;
             }
         }
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast-message';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            // Auto-remove after animation completes
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 3000);
+        }
         class Stage {
             constructor(index, scaleMode = '28mm') {
                 this.index = index;
@@ -1426,9 +1477,15 @@
                 const viewport = document.getElementById(`viewport-${modelData.id}`);
 
                 if (status && flatness) {
+                    // Get floating region info from the global models Map
+                    const globalModelData = models.get(modelData.id);
+                    const floatingMsg = globalModelData && globalModelData.floatingPartsRemoved
+                        ? ' - Floating regions removed'
+                        : ' - No floating regions';
+
                     if (flatness.isFlat) {
                         // Model is FLAT - show green border and detailed flatness info
-                        status.textContent = `✓ Flat: ${flatness.area.toFixed(0)}mm² contact area, ${(flatness.yRange * 1000).toFixed(2)}µm variation`;
+                        status.textContent = `✓ Flat: ${flatness.area.toFixed(0)}mm² contact area, ${(flatness.yRange * 1000).toFixed(2)}µm variation${floatingMsg}`;
                         status.className = 'alignment-status';
                         if (viewport) {
                             viewport.style.borderColor = '#4CAF50'; // Green border
@@ -1436,7 +1493,7 @@
                         }
                     } else {
                         // Model is NOT FLAT - show red border and reason
-                        status.textContent = `⚠ Not Flat: ${flatness.reason}`;
+                        status.textContent = `⚠ Not Flat: ${flatness.reason}${floatingMsg}`;
                         status.className = 'alignment-status not-flat';
                         if (viewport) {
                             viewport.style.borderColor = '#f44336'; // Red border
@@ -1838,7 +1895,7 @@
         function removeFloatingParts(geometry) {
             const positions = geometry.attributes.position;
             const triangleCount = positions.count / 3;
-            if (triangleCount === 0) return geometry;
+            if (triangleCount === 0) return { geometry, hadFloatingParts: false, componentsFound: 0 };
             const vertexToTriangles = new Map();
             for (let i = 0; i < triangleCount; i++) {
                 for (let j = 0; j < 3; j++) {
@@ -1882,7 +1939,7 @@
             }
             if (components.length <= 1) {
                 console.log('✅ Single component found - no floating parts');
-                return geometry;
+                return { geometry, hadFloatingParts: false, componentsFound: components.length };
             }
             let largestComponent = components[0];
             for (const component of components) {
@@ -1921,9 +1978,9 @@
             cleanGeometry.computeBoundingBox();
             if (newVertices.length === 0) {
                 console.warn('⚠️ Floating parts removal resulted in empty geometry - keeping original');
-                return geometry;
+                return { geometry, hadFloatingParts: true, componentsFound: components.length };
             }
-            return cleanGeometry;
+            return { geometry: cleanGeometry, hadFloatingParts: true, componentsFound: components.length };
         }
 
         // Fix normals function - Blender-style connectivity-based algorithm (Shift+N)
@@ -2550,8 +2607,11 @@
                 if (alreadyProcessed && processedModelData[globalIndex]) {
                     // Reuse already-processed model data
                     const progress = ((i + 1) / totalFiles) * 100;
-                    updateLoadingProgress(progress, `Loading model ${i + 1}/${totalFiles}: ${file.name}`);
                     const cachedData = processedModelData[globalIndex];
+                    const floatingMsg = cachedData.floatingPartsRemoved
+                        ? ` - Removed floating regions (${cachedData.componentsFound} parts found)`
+                        : ' - No floating regions';
+                    updateLoadingProgress(progress, `Loading model ${i + 1}/${totalFiles}: ${file.name}${floatingMsg}`);
                     // Clone the geometry (don't reuse the same instance)
                     const geometry = cachedData.geometry.clone();
                     const material = new THREE.MeshPhongMaterial({
@@ -2569,7 +2629,9 @@
                         originalHeight: cachedData.originalHeight,
                         originalWidth: cachedData.originalWidth,
                         originalDepth: cachedData.originalDepth,
-                        originalMaxDimension: cachedData.originalMaxDimension
+                        originalMaxDimension: cachedData.originalMaxDimension,
+                        floatingPartsRemoved: cachedData.floatingPartsRemoved || false,
+                        componentsFound: cachedData.componentsFound || 1
                     };
                 } else {
                     // First-time processing: parse STL and remove floating parts
@@ -2582,11 +2644,21 @@
                             continue;
                         }
                         // Always remove floating parts (no user control)
-                        const cleanedGeometry = removeFloatingParts(geometry);
-                        if (cleanedGeometry !== geometry) {
+                        const floatingResult = removeFloatingParts(geometry);
+                        let floatingPartsRemoved = false;
+                        let componentsFound = 1;
+                        if (floatingResult.geometry !== geometry) {
                             geometry.dispose();
-                            geometry = cleanedGeometry;
+                            geometry = floatingResult.geometry;
+                            floatingPartsRemoved = floatingResult.hadFloatingParts;
+                            componentsFound = floatingResult.componentsFound;
                         }
+
+                        // Update loading message to show floating region removal status
+                        const floatingMsg = floatingPartsRemoved
+                            ? ` - Removed floating regions (${componentsFound} parts found)`
+                            : ' - No floating regions';
+                        updateLoadingProgress(progress, `Processing ${i + 1}/${totalFiles}: ${file.name}${floatingMsg}`);
 
                         geometry.rotateX(-Math.PI / 2);
                         geometry.center();
@@ -2609,7 +2681,9 @@
                             originalHeight: size.y,
                             originalWidth: size.x,
                             originalDepth: size.z,
-                            originalMaxDimension: maxDimension
+                            originalMaxDimension: maxDimension,
+                            floatingPartsRemoved: floatingPartsRemoved,
+                            componentsFound: componentsFound
                         };
                         // Store in cache for future use
                         processedModelData[globalIndex] = {
@@ -2618,7 +2692,9 @@
                             originalHeight: size.y,
                             originalWidth: size.x,
                             originalDepth: size.z,
-                            originalMaxDimension: maxDimension
+                            originalMaxDimension: maxDimension,
+                            floatingPartsRemoved: floatingPartsRemoved,
+                            componentsFound: componentsFound
                         };
                     } catch (e) {
                         console.error('Error processing file:', file.name, e);
@@ -2762,6 +2838,20 @@
                     if (cutButtonsControls) {
                         cutButtonsControls.style.display = e.target.checked ? 'flex' : 'none';
                     }
+                    // Show/hide cut warning message
+                    const cutWarning = document.getElementById(`cut-warning-${modelId}`);
+                    if (cutWarning) {
+                        cutWarning.style.display = e.target.checked ? 'block' : 'none';
+                    }
+                    // Hide download button and flatness status in cut mode
+                    const downloadBtn = document.getElementById(`download-all-${modelId}`);
+                    if (downloadBtn) {
+                        downloadBtn.style.display = e.target.checked ? 'none' : 'block';
+                    }
+                    const flatnessStatus = document.getElementById(`flatness-${modelId}`);
+                    if (flatnessStatus) {
+                        flatnessStatus.style.display = e.target.checked ? 'none' : 'block';
+                    }
                 }
             });
             cutModeCheckboxDiv.appendChild(cutModeCheckbox);
@@ -2776,6 +2866,23 @@
             cutModeLabel.style.userSelect = 'none';
             cutModeCheckboxDiv.appendChild(cutModeLabel);
             topLeftControls.appendChild(cutModeCheckboxDiv);
+
+            // Warning message for cut mode
+            const cutWarningMessage = document.createElement('div');
+            cutWarningMessage.id = `cut-warning-${modelId}`;
+            cutWarningMessage.innerHTML = '⚠️ DON\'T CUT TOO MUCH<br>& RUIN THE DETAILS';
+            cutWarningMessage.style.display = 'none'; // Hidden by default, shown when cut mode is enabled
+            cutWarningMessage.style.backgroundColor = 'rgba(255, 152, 0, 0.95)';
+            cutWarningMessage.style.color = '#000';
+            cutWarningMessage.style.padding = '8px 12px';
+            cutWarningMessage.style.borderRadius = '5px';
+            cutWarningMessage.style.border = '3px solid #FF6F00';
+            cutWarningMessage.style.fontWeight = 'bold';
+            cutWarningMessage.style.fontSize = '13px';
+            cutWarningMessage.style.textAlign = 'center';
+            cutWarningMessage.style.lineHeight = '1.3';
+            cutWarningMessage.style.boxShadow = '0 4px 8px rgba(0,0,0,0.4)';
+            topLeftControls.appendChild(cutWarningMessage);
 
             // Cut Height Adjuster (+/- buttons)
             const cutHeightOverlay = document.createElement('div');
@@ -3188,6 +3295,73 @@
             viewport.appendChild(canvasOverlay);
             card.appendChild(viewport);
 
+            // FREE ROTATION MODE - Mouse drag controls
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            let freeRotationEnabled = false;
+
+            freeRotationCheckbox.addEventListener('change', (e) => {
+                freeRotationEnabled = e.target.checked;
+                viewport.style.cursor = freeRotationEnabled ? 'grab' : 'default';
+            });
+
+            viewport.addEventListener('mousedown', (e) => {
+                if (!freeRotationEnabled) return;
+                isDragging = true;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+                viewport.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            viewport.addEventListener('mousemove', (e) => {
+                if (!isDragging || !freeRotationEnabled) return;
+
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+
+                // Rotate the model based on mouse movement
+                const modelData = models.get(modelId);
+                if (modelData) {
+                    const rotationSpeed = 0.5;
+                    const newRotationY = (modelData.rotationY || 0) + deltaX * rotationSpeed;
+                    const newRotationX = (modelData.rotationX || 0) - deltaY * rotationSpeed;
+
+                    // Update rotation via the slider to keep UI in sync
+                    const ySlider = document.getElementById(`y-rotation-${modelId}`);
+                    const xSlider = document.getElementById(`x-rotation-${modelId}`);
+
+                    if (ySlider) {
+                        ySlider.value = newRotationY;
+                        ySlider.dispatchEvent(new Event('input'));
+                    }
+                    if (xSlider) {
+                        xSlider.value = newRotationX;
+                        xSlider.dispatchEvent(new Event('input'));
+                    }
+                }
+                e.preventDefault();
+            });
+
+            viewport.addEventListener('mouseup', () => {
+                if (isDragging && freeRotationEnabled) {
+                    isDragging = false;
+                    viewport.style.cursor = 'grab';
+                    // Bake the rotation when mouse is released
+                    const modelData = models.get(modelId);
+                    if (modelData) {
+                        bakeRotation(modelId);
+                    }
+                }
+            });
+
+            viewport.addEventListener('mouseleave', () => {
+                if (isDragging && freeRotationEnabled) {
+                    isDragging = false;
+                    viewport.style.cursor = 'grab';
+                }
+            });
+
             // Flatness status displayed BELOW the canvas
             const flatnessStatusDiv = document.createElement('div');
             flatnessStatusDiv.className = 'flatness-status';
@@ -3204,6 +3378,37 @@
             removeFloatingCheckbox.checked = true; // Always true - always remove floating parts on cut
             removeFloatingCheckbox.style.display = 'none'; // Hidden from user
             card.appendChild(removeFloatingCheckbox);
+
+            // FREE ROTATION MODE CHECKBOX
+            const freeRotationDiv = document.createElement('div');
+            freeRotationDiv.style.display = 'flex';
+            freeRotationDiv.style.alignItems = 'center';
+            freeRotationDiv.style.gap = '8px';
+            freeRotationDiv.style.marginBottom = '10px';
+            freeRotationDiv.style.padding = '8px';
+            freeRotationDiv.style.backgroundColor = 'rgba(42, 42, 42, 0.8)';
+            freeRotationDiv.style.borderRadius = '5px';
+            freeRotationDiv.style.border = '2px solid #2196F3';
+
+            const freeRotationCheckbox = document.createElement('input');
+            freeRotationCheckbox.type = 'checkbox';
+            freeRotationCheckbox.id = `free-rotation-${modelId}`;
+            freeRotationCheckbox.style.width = '18px';
+            freeRotationCheckbox.style.height = '18px';
+            freeRotationCheckbox.style.cursor = 'pointer';
+
+            const freeRotationLabel = document.createElement('label');
+            freeRotationLabel.setAttribute('for', `free-rotation-${modelId}`);
+            freeRotationLabel.textContent = '🔄 Free Rotation Mode (Drag to Rotate)';
+            freeRotationLabel.style.color = '#2196F3';
+            freeRotationLabel.style.fontWeight = 'bold';
+            freeRotationLabel.style.fontSize = '13px';
+            freeRotationLabel.style.cursor = 'pointer';
+            freeRotationLabel.style.userSelect = 'none';
+
+            freeRotationDiv.appendChild(freeRotationCheckbox);
+            freeRotationDiv.appendChild(freeRotationLabel);
+            card.appendChild(freeRotationDiv);
 
             // Y-AXIS ROTATION (GREEN) - Turntable/Floor Rotation - MOVED TO TOP
             const yRotationControls = document.createElement('div');
@@ -3331,7 +3536,9 @@
                 stageIndex: stageIndex,
                 originalHeight: monsterData.originalHeight,
                 originalMaxDimension: monsterData.originalMaxDimension,
-                scaleMode: scaleMode
+                scaleMode: scaleMode,
+                floatingPartsRemoved: monsterData.floatingPartsRemoved || false,
+                componentsFound: monsterData.componentsFound || 1
             });
             if (initialScale !== 1) {
                 clonedMesh.scale.set(initialScale, initialScale, initialScale);
@@ -3669,6 +3876,18 @@
                             modelLink.click();
                             document.body.removeChild(modelLink);
                             setTimeout(() => URL.revokeObjectURL(url), 100);
+
+                            // Show motivational message
+                            const messages = [
+                                "Go Team StarForge!!!",
+                                "You Are Doing Great!",
+                                "Awesome Work!",
+                                "Keep Up The Great Work!",
+                                "StarForge Power!"
+                            ];
+                            const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+                            showToast(randomMsg);
+
                             if (originalViewMode === 'stl') {
                                 stages[stageIndex].fitSTLOnlyInView();
                             } else {
@@ -4090,6 +4309,17 @@
                     undoButton.disabled = false;
                     undoButton.style.opacity = '1';
                 }
+
+                // Show motivational message
+                const messages = [
+                    "Go Team StarForge!!!",
+                    "You Are Doing Great!",
+                    "Perfect Cut!",
+                    "Keep Up The Great Work!",
+                    "StarForge Power!"
+                ];
+                const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+                showToast(randomMsg);
 
                 console.log('✅ Cut operation completed successfully!');
             } catch (error) {
