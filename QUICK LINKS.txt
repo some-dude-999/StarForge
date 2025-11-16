@@ -4,9 +4,6 @@ SFK - Public GitHub Pages Tool Links
 Stage 1 STL Duplicate & Quality Checker
 https://some-dude-999.github.io/SFK/Stage%201%20STL%20Duplicate%20%26%20Quality%20Checker.html
 
-QUICK START GUIDE - Stage 1 STL Duplicate & Quality Checker
-https://some-dude-999.github.io/SFK/QUICK%20START%20GUIDE%20-%20Stage%201%20STL%20Duplicate%20%26%20Quality%20Checker.html
-
 Stage 2 STL Resize, Cut Bottom, and Render
 https://some-dude-999.github.io/SFK/Stage%202%20STL%20Resize,%20Cut%20Bottom,%20and%20Render.html
 
