@@ -1336,6 +1336,16 @@
             createHeightLabel(text, color) {
                 const canvas = document.createElement('canvas');
                 const context = canvas.getContext('2d');
+
+                if (!context) {
+                    console.error('Failed to obtain 2D context for height label canvas.');
+                    // Return a minimal sprite as fallback
+                    const spriteMaterial = new THREE.SpriteMaterial({ color: 0xffffff });
+                    const sprite = new THREE.Sprite(spriteMaterial);
+                    sprite.scale.set(15, 4, 1);
+                    return sprite;
+                }
+
                 canvas.width = 256;
                 canvas.height = 64;
                 context.clearRect(0, 0, canvas.width, canvas.height);
@@ -3426,6 +3436,19 @@
                         canvas.width = img.width;
                         canvas.height = img.height;
                         const ctx = canvas.getContext('2d');
+
+                        if (!ctx) {
+                            console.error('Failed to obtain 2D context for JPG conversion canvas.');
+                            console.error('Using original screenshot data as fallback');
+                            const screenshotLink = document.createElement('a');
+                            screenshotLink.href = screenshotData;
+                            screenshotLink.download = `${uniqueName}.jpg`;
+                            document.body.appendChild(screenshotLink);
+                            screenshotLink.click();
+                            document.body.removeChild(screenshotLink);
+                            return;
+                        }
+
                         ctx.fillStyle = '#2a2a2a';
                         ctx.fillRect(0, 0, canvas.width, canvas.height);
                         ctx.drawImage(img, 0, 0);
