@@ -2763,16 +2763,6 @@
             if (scaleMode === '28mm') {
                 const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
 
-                // Height label
-                const heightTitleLabel = document.createElement('div');
-                heightTitleLabel.textContent = 'Height';
-                heightTitleLabel.style.color = '#4CAF50';
-                heightTitleLabel.style.fontWeight = 'bold';
-                heightTitleLabel.style.fontSize = '11px';
-                heightTitleLabel.style.textAlign = 'center';
-                heightTitleLabel.style.marginBottom = '3px';
-                heightControlsDiv.appendChild(heightTitleLabel);
-
                 // Horizontal layout for Feet and Inches controls
                 const heightRow = document.createElement('div');
                 heightRow.style.display = 'flex';
@@ -2892,30 +2882,9 @@
                 heightRow.appendChild(inchUpBtn);
 
                 heightControlsDiv.appendChild(heightRow);
-
-                // MM display
-                const mmDisplay = document.createElement('div');
-                mmDisplay.id = `mm-display-${modelId}`;
-                mmDisplay.style.color = '#4CAF50';
-                mmDisplay.style.fontSize = '10px';
-                mmDisplay.style.textAlign = 'center';
-                mmDisplay.style.marginTop = '3px';
-                mmDisplay.style.fontWeight = 'bold';
-                const currentMM = feetInchesToMM28mm(feet, inches);
-                mmDisplay.textContent = `(${currentMM.toFixed(1)}mm)`;
-                heightControlsDiv.appendChild(mmDisplay);
             } else {
                 // For non-28mm modes (100mm cute, planter, etc.)
                 const inches = mmToInches(monsterData.originalMaxDimension);
-
-                const heightTitleLabel = document.createElement('div');
-                heightTitleLabel.textContent = 'Size';
-                heightTitleLabel.style.color = '#4CAF50';
-                heightTitleLabel.style.fontWeight = 'bold';
-                heightTitleLabel.style.fontSize = '11px';
-                heightTitleLabel.style.textAlign = 'center';
-                heightTitleLabel.style.marginBottom = '3px';
-                heightControlsDiv.appendChild(heightTitleLabel);
 
                 const inchRow = document.createElement('div');
                 inchRow.style.display = 'flex';
@@ -2974,16 +2943,6 @@
                 inchRow.appendChild(inchUpBtn);
 
                 heightControlsDiv.appendChild(inchRow);
-
-                const mmDisplay = document.createElement('div');
-                mmDisplay.id = `mm-display-${modelId}`;
-                mmDisplay.style.color = '#4CAF50';
-                mmDisplay.style.fontSize = '10px';
-                mmDisplay.style.textAlign = 'center';
-                mmDisplay.style.marginTop = '3px';
-                mmDisplay.style.fontWeight = 'bold';
-                mmDisplay.textContent = `(${monsterData.originalMaxDimension.toFixed(1)}mm)`;
-                heightControlsDiv.appendChild(mmDisplay);
             }
 
             // Don't add height controls to topRightControls - they're now outside viewport
