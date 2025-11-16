@@ -11,6 +11,7 @@
             background-color: #1a1a1a;
             color: #ffffff;
             padding-top: 90px;
+            padding-bottom: 70px;
         }
         .sticky-header {
             position: fixed;
@@ -40,6 +41,42 @@
             opacity: 0.4;
             cursor: not-allowed;
             background-color: #555 !important;
+        }
+        .sticky-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #2a2a2a;
+            border-top: 3px solid #4CAF50;
+            padding: 10px 15px;
+            z-index: 1000;
+            box-shadow: 0 -4px 6px rgba(0,0,0,0.3);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+        .sticky-footer button {
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: bold;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .sticky-footer button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            background-color: #555 !important;
+        }
+        .sticky-footer .pagination-info {
+            font-size: 14px;
+            font-weight: bold;
+            color: #4CAF50;
+            min-width: 200px;
+            text-align: center;
         }
         .btn-process { background-color: #4CAF50; color: white; }
         .btn-process:hover:not(:disabled) { background-color: #45a049; }
@@ -612,10 +649,14 @@
             <input type="checkbox" id="globalRemoveFloating" checked style="width: 16px; height: 16px; cursor: pointer;">
             <span style="color: #4CAF50; font-weight: bold;">🧹 Remove Floating Parts</span>
         </label>
-        <div class="divider"></div>
-        <button class="btn-nav" id="prevPage" disabled>◀ Prev</button>
-        <span id="pageDisplay" style="font-size: 12px; font-weight: bold; color: #fff; align-self: center;">Page 1</span>
-        <button class="btn-nav" id="nextPage" disabled>Next ▶</button>
+    </div>
+    <div class="sticky-footer">
+        <button class="btn-nav" id="prevPage" disabled>◀ Previous Page</button>
+        <div class="pagination-info">
+            <div id="pageDisplay" style="margin-bottom: 4px;">Page 1</div>
+            <div id="footerModelCount" style="font-size: 12px; color: #aaa;">0 models loaded</div>
+        </div>
+        <button class="btn-nav" id="nextPage" disabled>Next Page ▶</button>
     </div>
     <div class="container">
         <div class="drop-zone" id="dropZone">
@@ -722,7 +763,7 @@
 
         const SCALE_28MM_RATIO = 56;
         const MONSTERS_PER_STAGE = 1;
-        const MODELS_PER_PAGE = 16;
+        const MODELS_PER_PAGE = 12;
         let pendingFiles = [];
         let stages = [];
         let models = new Map();
@@ -2001,15 +2042,66 @@
                 errorMsg.style.display = 'block';
                 return;
             }
+
+            // Check if we have models already loaded on the current page
+            const hasExistingModels = models.size > 0;
+
+            if (hasExistingModels) {
+                // Just rescale existing models instead of reloading
+                console.log('🔄 Rescaling existing models to new target height');
+                loading.style.display = 'block';
+                updateLoadingProgress(50, 'Rescaling models...');
+
+                // Update target for future pages
+                currentScaleMode = scaleMode;
+                currentTargetHeightMM = targetHeightMM;
+
+                // Rescale all visible models
+                models.forEach((modelData, modelId) => {
+                    let newScale;
+                    if (targetHeightMM === null) {
+                        newScale = 1.0; // No scaling
+                    } else {
+                        if (scaleMode === '28mm') {
+                            newScale = targetHeightMM / modelData.originalHeight;
+                        } else {
+                            newScale = targetHeightMM / modelData.originalMaxDimension;
+                        }
+                    }
+
+                    // Update the model scale
+                    modelData.scale = newScale;
+                    modelData.scaleMode = scaleMode;
+                    modelData.mesh.scale.set(newScale, newScale, newScale);
+                    modelData.mesh.updateMatrixWorld(true);
+
+                    // Realign to ground and update visuals
+                    const stageIndex = modelData.stageIndex;
+                    if (stages[stageIndex]) {
+                        stages[stageIndex].alignToGround(modelData.mesh);
+                        stages[stageIndex].recenterCurrentView();
+                        stages[stageIndex].updateManPosition();
+                        stages[stageIndex].updateHeightLabel(modelId, modelData.mesh);
+                    }
+
+                    // Update UI
+                    updateAllUIForModel(modelId);
+                });
+
+                loading.style.display = 'none';
+                checkExportButtons();
+                console.log('✅ Rescaling complete');
+                return;
+            }
+
+            // First time processing - load the models
             loading.style.display = 'block';
             errorMsg.style.display = 'none';
-            // Check if we already have processed models
             const alreadyProcessed = processedModelData.length === pendingFiles.length;
             if (alreadyProcessed) {
                 updateLoadingProgress(0, 'Rescaling existing models...');
                 console.log('♻️ Reusing already-processed models (skipping STL parse & floating removal)');
                 console.log(`📦 Cache hit: ${processedModelData.length} models available`);
-                // Show user that we're using cached data
                 const modelCountDisplay = document.getElementById('modelCountDisplay');
                 if (modelCountDisplay) {
                     const originalText = modelCountDisplay.textContent;
@@ -2087,26 +2179,99 @@
             if (modelCountDisplay) {
                 modelCountDisplay.textContent = `${startIdx}-${endIdx} / ${total} models`;
             }
+            const footerModelCount = document.getElementById('footerModelCount');
+            if (footerModelCount) {
+                footerModelCount.textContent = `Showing ${startIdx}-${endIdx} of ${total} total models`;
+            }
             const pageDisplay = document.getElementById('pageDisplay');
             if (pageDisplay) {
-                pageDisplay.textContent = `Page ${currentPage} / ${totalPages}`;
+                pageDisplay.textContent = `Page ${currentPage} of ${totalPages}`;
             }
             const prevBtn = document.getElementById('prevPage');
             const nextBtn = document.getElementById('nextPage');
             if (prevBtn) prevBtn.disabled = currentPage <= 1;
             if (nextBtn) nextBtn.disabled = currentPage >= totalPages;
         }
+        async function downloadAllModelsOnCurrentPage() {
+            console.log('📥 Downloading all models on current page...');
+            const modelIds = Array.from(models.keys());
+            for (let i = 0; i < modelIds.length; i++) {
+                const modelId = modelIds[i];
+                console.log(`Downloading ${i + 1}/${modelIds.length}: ${modelId}`);
+                downloadModelAndScreenshot(modelId);
+                // Small delay between downloads to prevent browser overload
+                if (i < modelIds.length - 1) {
+                    await new Promise(r => setTimeout(r, 500));
+                }
+            }
+            console.log('✅ All downloads initiated');
+        }
         async function goToPreviousPage() {
             if (currentPage > 1) {
+                // Download all models on current page before switching
+                await downloadAllModelsOnCurrentPage();
                 currentPage--;
                 await processCurrentPage();
             }
         }
         async function goToNextPage() {
             if (currentPage < totalPages) {
+                // Download all models on current page before switching
+                await downloadAllModelsOnCurrentPage();
                 currentPage++;
                 await processCurrentPage();
             }
+        }
+        function removeModel(modelId) {
+            if (!confirm('Are you sure you want to remove this model?')) {
+                return;
+            }
+
+            console.log('🗑️ Removing model:', modelId);
+
+            // Get the model data before removing
+            const modelData = models.get(modelId);
+            if (!modelData) {
+                console.warn('Model not found:', modelId);
+                return;
+            }
+
+            // Dispose of Three.js resources
+            if (modelData.mesh) {
+                if (modelData.mesh.geometry) {
+                    modelData.mesh.geometry.dispose();
+                }
+                if (modelData.mesh.material) {
+                    if (Array.isArray(modelData.mesh.material)) {
+                        modelData.mesh.material.forEach(m => m.dispose());
+                    } else {
+                        modelData.mesh.material.dispose();
+                    }
+                }
+            }
+
+            // Dispose of the stage renderer
+            const stageIndex = modelData.stageIndex;
+            if (stages[stageIndex]) {
+                if (stages[stageIndex].renderer) {
+                    stages[stageIndex].renderer.dispose();
+                }
+                stages[stageIndex] = null;
+            }
+
+            // Remove from models map
+            models.delete(modelId);
+
+            // Remove the card from DOM
+            const card = document.getElementById(`card-${modelId}`);
+            if (card) {
+                card.remove();
+            }
+
+            // Check if we need to update export buttons
+            checkExportButtons();
+
+            console.log('✅ Model removed successfully');
         }
         async function processModels(filesToProcess, targetHeightMM, scaleMode, startIdx) {
             const totalFiles = filesToProcess.length;
@@ -2211,10 +2376,44 @@
             const stage = new Stage(stageIndex, scaleMode);
             const card = document.createElement('div');
             card.className = 'model-card';
+            card.id = `card-${modelId}`;
+            card.style.position = 'relative';
+
             const title = document.createElement('div');
             title.className = 'model-title';
             title.textContent = modelName;
             card.appendChild(title);
+
+            // Delete button in top-right corner
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '✕';
+            deleteBtn.title = 'Remove this model';
+            deleteBtn.style.position = 'absolute';
+            deleteBtn.style.top = '10px';
+            deleteBtn.style.right = '10px';
+            deleteBtn.style.width = '30px';
+            deleteBtn.style.height = '30px';
+            deleteBtn.style.padding = '0';
+            deleteBtn.style.backgroundColor = '#f44336';
+            deleteBtn.style.color = 'white';
+            deleteBtn.style.border = 'none';
+            deleteBtn.style.borderRadius = '50%';
+            deleteBtn.style.cursor = 'pointer';
+            deleteBtn.style.fontSize = '18px';
+            deleteBtn.style.fontWeight = 'bold';
+            deleteBtn.style.lineHeight = '1';
+            deleteBtn.style.zIndex = '100';
+            deleteBtn.style.transition = 'all 0.2s';
+            deleteBtn.onmouseover = () => {
+                deleteBtn.style.backgroundColor = '#d32f2f';
+                deleteBtn.style.transform = 'scale(1.1)';
+            };
+            deleteBtn.onmouseout = () => {
+                deleteBtn.style.backgroundColor = '#f44336';
+                deleteBtn.style.transform = 'scale(1)';
+            };
+            deleteBtn.onclick = () => removeModel(modelId);
+            card.appendChild(deleteBtn);
 
             // Height controls OUTSIDE viewport - displayed above the canvas
             const heightControlsWrapper = document.createElement('div');
