@@ -2997,7 +2997,7 @@
             const yRotationLabel = document.createElement('label');
             yRotationLabel.className = 'rotation-label y-axis';
             yRotationLabel.id = `y-label-${modelId}`;
-            yRotationLabel.textContent = `Y-Axis Rotation (Turntable): 0°`;
+            yRotationLabel.textContent = `Y-Axis Rotation (Turntable): 125°`;
             yRotationControls.appendChild(yRotationLabel);
             const yRotationSlider = document.createElement('input');
             yRotationSlider.type = 'range';
@@ -3005,7 +3005,7 @@
             yRotationSlider.id = `y-rotation-${modelId}`;
             yRotationSlider.min = -180;
             yRotationSlider.max = 180;
-            yRotationSlider.value = 0;
+            yRotationSlider.value = 125;
             yRotationSlider.addEventListener('input', (e) => {
                 const degrees = parseFloat(e.target.value);
                 document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${degrees}°`;
@@ -3110,7 +3110,7 @@
                 filename: monsterData.filename,
                 scale: initialScale,
                 rotationX: 0,
-                rotationY: 0,
+                rotationY: 125,
                 rotationZ: 0,
                 baseModelRotation: new THREE.Quaternion(),
                 baseBoundingBoxRotation: new THREE.Quaternion(),
@@ -3136,6 +3136,8 @@
             stage.addMonster(clonedMesh, modelId);
             stages.push(stage);
             updateAllUIForModel(modelId);
+            // Apply the initial 125-degree Y rotation
+            updateModelRotation(modelId, 'y', 125);
         }
         function updateModelCount() {
             const count = models.size;
@@ -3436,9 +3438,9 @@
                             } else {
                                 stages[stageIndex].fitAllModelsAndManInView();
                             }
-                        }, 300);
-                    }, 300);
-                }, 100);
+                        }, 1000);
+                    }, 500);
+                }, 200);
             }
         }
 
