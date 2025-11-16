@@ -652,6 +652,74 @@
                 }
             }, 500);
         });
+
+        /*
+         * ═══════════════════════════════════════════════════════════════════════════════
+         * StarForge STL Processing Tool - Internal Quality Control & Production Pipeline
+         * ═══════════════════════════════════════════════════════════════════════════════
+         *
+         * PURPOSE:
+         * This web-based tool streamlines the STL model preparation workflow for 3D printing.
+         * It provides quick scaling, flattening, bottom-cutting, and automated quality control
+         * checks to ensure models are print-ready.
+         *
+         * KEY FEATURES:
+         *
+         * 1. SCALING & SIZE ADJUSTMENT
+         *    - Multiple preset scales: 28mm tabletop gaming (6'2", 9', 12'), 100mm cute figures, 290mm planters
+         *    - Real-time height adjustment in feet/inches or direct measurements
+         *    - Visual scale reference with 3D human figure overlay
+         *
+         * 2. BOTTOM CUTTING & FLATTENING
+         *    - Interactive cut mode with adjustable cut height
+         *    - Automatic bottom surface generation using earcut triangulation
+         *    - Drag-to-adjust cut plane for precise control
+         *    - Floating parts removal to ensure clean geometry
+         *
+         * 3. QUALITY CONTROL CHECKS
+         *    - Automated flatness detection with detailed metrics:
+         *      • Contact area calculation (mm²)
+         *      • Height variation measurement (micrometers)
+         *      • Minimum 3 vertices & planar surface validation
+         *    - Visual feedback via viewport border color:
+         *      • GREEN border = FLAT & ready for printing
+         *      • RED border = NOT FLAT & needs adjustment
+         *
+         * 4. DUAL RENDER OUTPUT
+         *    - Technical JPG Render (with quality control border):
+         *      • Includes colored border indicating flatness status
+         *      • Front view with reference man for scale verification
+         *      • Used for internal QC and documentation
+         *    - Production PNG Render (transparent, clean):
+         *      • No borders or technical indicators
+         *      • 15° tilted view for professional presentation
+         *      • Transparent background for marketing/product pages
+         *    - STL Export: Processed model ready for slicing
+         *
+         * 5. USER INTERFACE ORGANIZATION
+         *    - Top-right overlay: Zoom controls & height adjustment (always accessible)
+         *    - Top-left overlay: Cut mode controls (shows only when needed)
+         *    - Bottom-right: Download button for all file types
+         *    - Status indicator: Real-time flatness feedback
+         *
+         * WORKFLOW:
+         * 1. Upload STL files (drag & drop or click to browse)
+         * 2. Select scaling preset or adjust height manually
+         * 3. Enable cut mode and adjust cut height to flatten bottom
+         * 4. Apply cut - UI automatically hides after successful cut
+         * 5. Verify flatness via green border and status details
+         * 6. Download files: STL for printing, JPG for QC, PNG for production
+         *
+         * TECHNICAL NOTES:
+         * - Three.js for 3D rendering and geometry manipulation
+         * - Earcut library for robust polygon triangulation during cutting
+         * - Orthographic camera for consistent scale representation
+         * - All measurements in millimeters with precision to 0.1mm
+         * - 28mm scale uses 1:56 ratio (standard tabletop gaming scale)
+         *
+         * ═══════════════════════════════════════════════════════════════════════════════
+         */
+
         const SCALE_28MM_RATIO = 56;
         const MONSTERS_PER_STAGE = 1;
         const MODELS_PER_PAGE = 16;
@@ -1304,13 +1372,25 @@
                 const modelData = this.models[0];
                 const flatness = this.flatnessStatus.get(modelData.id);
                 const status = document.getElementById(`status-${this.index}`);
+                const viewport = document.getElementById(`viewport-${modelData.id}`);
+
                 if (status && flatness) {
                     if (flatness.isFlat) {
-                        status.textContent = '✓ Flat';
+                        // Model is FLAT - show green border and detailed flatness info
+                        status.textContent = `✓ Flat: ${flatness.area.toFixed(0)}mm² contact area, ${(flatness.yRange * 1000).toFixed(2)}µm variation`;
                         status.className = 'alignment-status';
+                        if (viewport) {
+                            viewport.style.borderColor = '#4CAF50'; // Green border
+                            viewport.style.borderWidth = '4px';
+                        }
                     } else {
-                        status.textContent = '⚠ Not Flat';
+                        // Model is NOT FLAT - show red border and reason
+                        status.textContent = `⚠ Not Flat: ${flatness.reason}`;
                         status.className = 'alignment-status not-flat';
+                        if (viewport) {
+                            viewport.style.borderColor = '#f44336'; // Red border
+                            viewport.style.borderWidth = '4px';
+                        }
                     }
                 }
             }
@@ -1470,6 +1550,7 @@
                 return renderer;
             }
             takeScreenshot() {
+                // JPG Technical Render - includes colored border based on flatness status
                 const width = 1080;
                 const height = 1080;
                 const tempRenderer = this.createTempRenderer(width, height);
@@ -1479,7 +1560,28 @@
                 tempRenderer.setClearColor(clearColor, clearAlpha);
                 this.scene.background = new THREE.Color(0x2a2a2a);
                 tempRenderer.render(this.scene, this.camera);
-                const dataURL = tempRenderer.domElement.toDataURL('image/png');
+
+                // Add flatness status border to the technical JPG render
+                const canvas = tempRenderer.domElement;
+                const ctx = canvas.getContext('2d');
+
+                // Determine border color based on flatness status
+                let borderColor = '#444'; // Default gray
+                if (this.models.length > 0) {
+                    const modelData = this.models[0];
+                    const flatness = this.flatnessStatus.get(modelData.id);
+                    if (flatness) {
+                        borderColor = flatness.isFlat ? '#4CAF50' : '#f44336'; // Green if flat, red if not
+                    }
+                }
+
+                // Draw border on canvas (technical render quality control indicator)
+                const borderWidth = 8; // 8px border at 1080px resolution
+                ctx.strokeStyle = borderColor;
+                ctx.lineWidth = borderWidth;
+                ctx.strokeRect(borderWidth / 2, borderWidth / 2, width - borderWidth, height - borderWidth);
+
+                const dataURL = canvas.toDataURL('image/png');
                 tempRenderer.dispose();
                 return dataURL;
             }
@@ -2113,138 +2215,14 @@
             title.className = 'model-title';
             title.textContent = modelName;
             card.appendChild(title);
-            const controls = document.createElement('div');
-            controls.className = 'card-controls';
-            const zoomInBtn = document.createElement('button');
-            zoomInBtn.className = 'btn-zoom';
-            zoomInBtn.textContent = '+';
-            zoomInBtn.onclick = () => {
-                stage.zoomLevel = Math.min(10, stage.zoomLevel + 0.3);
-                stage.updateCamera();
-            };
-            controls.appendChild(zoomInBtn);
-            const zoomOutBtn = document.createElement('button');
-            zoomOutBtn.className = 'btn-zoom';
-            zoomOutBtn.textContent = '−';
-            zoomOutBtn.onclick = () => {
-                stage.zoomLevel = Math.max(0.1, stage.zoomLevel - 0.3);
-                stage.updateCamera();
-            };
-            controls.appendChild(zoomOutBtn);
-            card.appendChild(controls);
-            let initialHeightText;
-            if (scaleMode === '28mm') {
-                const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
-                initialHeightText = formatFeetInches(feet, inches);
-            } else {
-                const inches = mmToInches(monsterData.originalHeight);
-                initialHeightText = formatInches(inches);
-            }
-            const heightControls = document.createElement('div');
-            heightControls.className = 'height-controls';
-            const heightLabel = document.createElement('span');
-            heightLabel.style.color = '#aaa';
-            heightLabel.style.fontSize = '12px';
-            heightLabel.style.fontWeight = 'bold';
-            heightLabel.textContent = 'Height:';
-            heightControls.appendChild(heightLabel);
-            if (scaleMode === '28mm') {
-                const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
-                const feetGroup = document.createElement('div');
-                feetGroup.className = 'height-input-group';
-                const feetUpBtn = document.createElement('button');
-                feetUpBtn.className = 'height-btn';
-                feetUpBtn.textContent = '▲';
-                feetUpBtn.onclick = () => adjustHeight(modelId, 'feet', 1);
-                feetGroup.appendChild(feetUpBtn);
-                const feetInput = document.createElement('input');
-                feetInput.type = 'number';
-                feetInput.className = 'height-input';
-                feetInput.id = `feet-${modelId}`;
-                feetInput.value = Math.floor(feet);
-                feetInput.min = 0;
-                feetInput.max = 100;
-                feetGroup.appendChild(feetInput);
-                const feetDownBtn = document.createElement('button');
-                feetDownBtn.className = 'height-btn';
-                feetDownBtn.textContent = '▼';
-                feetDownBtn.onclick = () => adjustHeight(modelId, 'feet', -1);
-                feetGroup.appendChild(feetDownBtn);
-                heightControls.appendChild(feetGroup);
-                const feetLabel = document.createElement('span');
-                feetLabel.className = 'unit-label';
-                feetLabel.textContent = "'";
-                heightControls.appendChild(feetLabel);
-                const inchGroup = document.createElement('div');
-                inchGroup.className = 'height-input-group';
-                const inchUpBtn = document.createElement('button');
-                inchUpBtn.className = 'height-btn';
-                inchUpBtn.textContent = '▲';
-                inchUpBtn.onclick = () => adjustHeight(modelId, 'inches', 1);
-                inchGroup.appendChild(inchUpBtn);
-                const inchInput = document.createElement('input');
-                inchInput.type = 'number';
-                inchInput.className = 'height-input';
-                inchInput.id = `inches-${modelId}`;
-                inchInput.value = Math.round(inches);
-                inchInput.min = 0;
-                inchInput.max = 11;
-                inchGroup.appendChild(inchInput);
-                const inchDownBtn = document.createElement('button');
-                inchDownBtn.className = 'height-btn';
-                inchDownBtn.textContent = '▼';
-                inchDownBtn.onclick = () => adjustHeight(modelId, 'inches', -1);
-                inchGroup.appendChild(inchDownBtn);
-                heightControls.appendChild(inchGroup);
-                const inchLabel = document.createElement('span');
-                inchLabel.className = 'unit-label';
-                inchLabel.textContent = '"';
-                heightControls.appendChild(inchLabel);
-                const mmDisplay = document.createElement('span');
-                mmDisplay.className = 'mm-display';
-                mmDisplay.id = `mm-display-${modelId}`;
-                const currentMM = feetInchesToMM28mm(feet, inches);
-                mmDisplay.textContent = `(${currentMM.toFixed(1)}mm)`;
-                heightControls.appendChild(mmDisplay);
-                feetInput.addEventListener('input', () => updateModelFromInputs(modelId));
-                inchInput.addEventListener('input', () => updateModelFromInputs(modelId));
-            } else {
-                const inches = mmToInches(monsterData.originalMaxDimension);
-                const inchGroup = document.createElement('div');
-                inchGroup.className = 'height-input-group';
-                const inchUpBtn = document.createElement('button');
-                inchUpBtn.className = 'height-btn';
-                inchUpBtn.textContent = '▲';
-                inchUpBtn.onclick = () => adjustHeightInches(modelId, 0.5);
-                inchGroup.appendChild(inchUpBtn);
-                const inchInput = document.createElement('input');
-                inchInput.type = 'number';
-                inchInput.className = 'height-input';
-                inchInput.id = `inches-${modelId}`;
-                inchInput.value = inches.toFixed(1);
-                inchInput.min = 0;
-                inchInput.step = 0.1;
-                inchGroup.appendChild(inchInput);
-                const inchDownBtn = document.createElement('button');
-                inchDownBtn.className = 'height-btn';
-                inchDownBtn.textContent = '▼';
-                inchDownBtn.onclick = () => adjustHeightInches(modelId, -0.5);
-                inchGroup.appendChild(inchDownBtn);
-                heightControls.appendChild(inchGroup);
-                const inchLabel = document.createElement('span');
-                inchLabel.className = 'unit-label';
-                inchLabel.textContent = '" (longest)';
-                heightControls.appendChild(inchLabel);
-                const mmDisplay = document.createElement('span');
-                mmDisplay.className = 'mm-display';
-                mmDisplay.id = `mm-display-${modelId}`;
-                mmDisplay.textContent = `(${monsterData.originalMaxDimension.toFixed(1)}mm)`;
-                heightControls.appendChild(mmDisplay);
-                inchInput.addEventListener('input', () => updateModelFromInputsRegular(modelId));
-            }
-            card.appendChild(heightControls);
+            // Card controls and height controls removed - moved to canvas overlay (created later in code)
+
             const viewport = document.createElement('div');
             viewport.className = 'viewport';
+            viewport.id = `viewport-${modelId}`;
+            viewport.style.border = '3px solid #444'; // Default border, will be updated based on flatness
+            viewport.style.transition = 'border-color 0.3s ease';
+
             const status = document.createElement('div');
             status.className = 'alignment-status';
             status.id = `status-${stageIndex}`;
@@ -2306,9 +2284,15 @@
                 const stage = stages[stageIndex];
                 if (stage) {
                     stage.toggleCutMode(e.target.checked);
+                    // Show/hide cut height adjuster
                     const cutHeightControls = document.getElementById(`cut-height-overlay-${modelId}`);
                     if (cutHeightControls) {
                         cutHeightControls.style.display = e.target.checked ? 'flex' : 'none';
+                    }
+                    // Show/hide cut action buttons (Apply Cut & Undo)
+                    const cutButtonsControls = document.getElementById(`cut-buttons-overlay-${modelId}`);
+                    if (cutButtonsControls) {
+                        cutButtonsControls.style.display = e.target.checked ? 'flex' : 'none';
                     }
                 }
             });
@@ -2393,24 +2377,362 @@
             };
             cutHeightOverlay.appendChild(cutHeightUpBtn);
             topLeftControls.appendChild(cutHeightOverlay);
+
+            // Apply Cut and Undo Buttons (below cut height adjuster, hidden by default)
+            const cutButtonsOverlay = document.createElement('div');
+            cutButtonsOverlay.id = `cut-buttons-overlay-${modelId}`;
+            cutButtonsOverlay.style.display = 'none'; // Hidden by default, shown when cut mode is enabled
+            cutButtonsOverlay.style.flexDirection = 'column';
+            cutButtonsOverlay.style.gap = '5px';
+
+            const cutButton = document.createElement('button');
+            cutButton.id = `cut-button-${modelId}`;
+            cutButton.textContent = '✂️ Apply Cut';
+            cutButton.style.padding = '8px';
+            cutButton.style.backgroundColor = '#FF9800';
+            cutButton.style.color = 'white';
+            cutButton.style.border = 'none';
+            cutButton.style.borderRadius = '5px';
+            cutButton.style.cursor = 'pointer';
+            cutButton.style.fontWeight = 'bold';
+            cutButton.style.fontSize = '12px';
+            cutButton.onclick = () => applyCutToModel(modelId);
+            cutButtonsOverlay.appendChild(cutButton);
+
+            const undoButton = document.createElement('button');
+            undoButton.id = `undo-cut-${modelId}`;
+            undoButton.textContent = '↩️ Undo';
+            undoButton.style.padding = '8px';
+            undoButton.style.backgroundColor = '#757575';
+            undoButton.style.color = 'white';
+            undoButton.style.border = 'none';
+            undoButton.style.borderRadius = '5px';
+            undoButton.style.cursor = 'pointer';
+            undoButton.style.fontWeight = 'bold';
+            undoButton.style.fontSize = '12px';
+            undoButton.disabled = true;
+            undoButton.style.opacity = '0.5';
+            undoButton.onclick = () => undoCut(modelId);
+            cutButtonsOverlay.appendChild(undoButton);
+
+            topLeftControls.appendChild(cutButtonsOverlay);
             canvasOverlay.appendChild(topLeftControls);
 
-            // Bottom-right: Download button
+            // ===========================
+            // Top-right: Zoom and Height Controls
+            // ===========================
+            const topRightControls = document.createElement('div');
+            topRightControls.style.position = 'absolute';
+            topRightControls.style.top = '10px';
+            topRightControls.style.right = '10px';
+            topRightControls.style.display = 'flex';
+            topRightControls.style.flexDirection = 'column';
+            topRightControls.style.gap = '5px';
+            topRightControls.style.pointerEvents = 'auto';
+
+            // Zoom Controls (+/- buttons)
+            const zoomControlsDiv = document.createElement('div');
+            zoomControlsDiv.style.display = 'flex';
+            zoomControlsDiv.style.alignItems = 'center';
+            zoomControlsDiv.style.gap = '5px';
+            zoomControlsDiv.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
+            zoomControlsDiv.style.padding = '5px';
+            zoomControlsDiv.style.borderRadius = '5px';
+            zoomControlsDiv.style.border = '2px solid #2196F3';
+
+            const zoomOutBtn = document.createElement('button');
+            zoomOutBtn.textContent = '−';
+            zoomOutBtn.style.padding = '5px 12px';
+            zoomOutBtn.style.backgroundColor = '#2196F3';
+            zoomOutBtn.style.color = 'white';
+            zoomOutBtn.style.border = 'none';
+            zoomOutBtn.style.borderRadius = '3px';
+            zoomOutBtn.style.cursor = 'pointer';
+            zoomOutBtn.style.fontWeight = 'bold';
+            zoomOutBtn.style.fontSize = '16px';
+            zoomOutBtn.onclick = () => {
+                stage.zoomLevel = Math.max(0.1, stage.zoomLevel - 0.3);
+                stage.updateCamera();
+            };
+            zoomControlsDiv.appendChild(zoomOutBtn);
+
+            const zoomLabel = document.createElement('span');
+            zoomLabel.textContent = 'Zoom';
+            zoomLabel.style.color = '#2196F3';
+            zoomLabel.style.fontWeight = 'bold';
+            zoomLabel.style.fontSize = '11px';
+            zoomLabel.style.minWidth = '35px';
+            zoomLabel.style.textAlign = 'center';
+            zoomControlsDiv.appendChild(zoomLabel);
+
+            const zoomInBtn = document.createElement('button');
+            zoomInBtn.textContent = '+';
+            zoomInBtn.style.padding = '5px 12px';
+            zoomInBtn.style.backgroundColor = '#2196F3';
+            zoomInBtn.style.color = 'white';
+            zoomInBtn.style.border = 'none';
+            zoomInBtn.style.borderRadius = '3px';
+            zoomInBtn.style.cursor = 'pointer';
+            zoomInBtn.style.fontWeight = 'bold';
+            zoomInBtn.style.fontSize = '16px';
+            zoomInBtn.onclick = () => {
+                stage.zoomLevel = Math.min(10, stage.zoomLevel + 0.3);
+                stage.updateCamera();
+            };
+            zoomControlsDiv.appendChild(zoomInBtn);
+            topRightControls.appendChild(zoomControlsDiv);
+
+            // Height Adjust Controls
+            const heightControlsDiv = document.createElement('div');
+            heightControlsDiv.id = `height-controls-overlay-${modelId}`;
+            heightControlsDiv.style.display = 'flex';
+            heightControlsDiv.style.flexDirection = 'column';
+            heightControlsDiv.style.gap = '3px';
+            heightControlsDiv.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
+            heightControlsDiv.style.padding = '6px';
+            heightControlsDiv.style.borderRadius = '5px';
+            heightControlsDiv.style.border = '2px solid #4CAF50';
+            heightControlsDiv.style.minWidth = '120px';
+
+            if (scaleMode === '28mm') {
+                const { feet, inches } = mm28mmToFeetInches(monsterData.originalHeight);
+
+                // Height label
+                const heightTitleLabel = document.createElement('div');
+                heightTitleLabel.textContent = 'Height';
+                heightTitleLabel.style.color = '#4CAF50';
+                heightTitleLabel.style.fontWeight = 'bold';
+                heightTitleLabel.style.fontSize = '11px';
+                heightTitleLabel.style.textAlign = 'center';
+                heightTitleLabel.style.marginBottom = '3px';
+                heightControlsDiv.appendChild(heightTitleLabel);
+
+                // Feet controls
+                const feetRow = document.createElement('div');
+                feetRow.style.display = 'flex';
+                feetRow.style.alignItems = 'center';
+                feetRow.style.gap = '3px';
+                feetRow.style.justifyContent = 'center';
+
+                const feetDownBtn = document.createElement('button');
+                feetDownBtn.textContent = '▼';
+                feetDownBtn.style.padding = '2px 6px';
+                feetDownBtn.style.backgroundColor = '#4CAF50';
+                feetDownBtn.style.color = 'white';
+                feetDownBtn.style.border = 'none';
+                feetDownBtn.style.borderRadius = '3px';
+                feetDownBtn.style.cursor = 'pointer';
+                feetDownBtn.style.fontSize = '10px';
+                feetDownBtn.onclick = () => adjustHeight(modelId, 'feet', -1);
+                feetRow.appendChild(feetDownBtn);
+
+                const feetInput = document.createElement('input');
+                feetInput.type = 'number';
+                feetInput.id = `feet-${modelId}`;
+                feetInput.value = Math.floor(feet);
+                feetInput.min = 0;
+                feetInput.max = 100;
+                feetInput.style.width = '35px';
+                feetInput.style.padding = '3px';
+                feetInput.style.backgroundColor = '#1a1a1a';
+                feetInput.style.color = 'white';
+                feetInput.style.border = '1px solid #4CAF50';
+                feetInput.style.borderRadius = '3px';
+                feetInput.style.textAlign = 'center';
+                feetInput.style.fontSize = '12px';
+                feetInput.addEventListener('input', () => updateModelFromInputs(modelId));
+                feetRow.appendChild(feetInput);
+
+                const feetLabel = document.createElement('span');
+                feetLabel.textContent = "'";
+                feetLabel.style.color = '#aaa';
+                feetLabel.style.fontSize = '12px';
+                feetLabel.style.fontWeight = 'bold';
+                feetRow.appendChild(feetLabel);
+
+                const feetUpBtn = document.createElement('button');
+                feetUpBtn.textContent = '▲';
+                feetUpBtn.style.padding = '2px 6px';
+                feetUpBtn.style.backgroundColor = '#4CAF50';
+                feetUpBtn.style.color = 'white';
+                feetUpBtn.style.border = 'none';
+                feetUpBtn.style.borderRadius = '3px';
+                feetUpBtn.style.cursor = 'pointer';
+                feetUpBtn.style.fontSize = '10px';
+                feetUpBtn.onclick = () => adjustHeight(modelId, 'feet', 1);
+                feetRow.appendChild(feetUpBtn);
+
+                heightControlsDiv.appendChild(feetRow);
+
+                // Inches controls
+                const inchRow = document.createElement('div');
+                inchRow.style.display = 'flex';
+                inchRow.style.alignItems = 'center';
+                inchRow.style.gap = '3px';
+                inchRow.style.justifyContent = 'center';
+
+                const inchDownBtn = document.createElement('button');
+                inchDownBtn.textContent = '▼';
+                inchDownBtn.style.padding = '2px 6px';
+                inchDownBtn.style.backgroundColor = '#4CAF50';
+                inchDownBtn.style.color = 'white';
+                inchDownBtn.style.border = 'none';
+                inchDownBtn.style.borderRadius = '3px';
+                inchDownBtn.style.cursor = 'pointer';
+                inchDownBtn.style.fontSize = '10px';
+                inchDownBtn.onclick = () => adjustHeight(modelId, 'inches', -1);
+                inchRow.appendChild(inchDownBtn);
+
+                const inchInput = document.createElement('input');
+                inchInput.type = 'number';
+                inchInput.id = `inches-${modelId}`;
+                inchInput.value = Math.round(inches);
+                inchInput.min = 0;
+                inchInput.max = 11;
+                inchInput.style.width = '35px';
+                inchInput.style.padding = '3px';
+                inchInput.style.backgroundColor = '#1a1a1a';
+                inchInput.style.color = 'white';
+                inchInput.style.border = '1px solid #4CAF50';
+                inchInput.style.borderRadius = '3px';
+                inchInput.style.textAlign = 'center';
+                inchInput.style.fontSize = '12px';
+                inchInput.addEventListener('input', () => updateModelFromInputs(modelId));
+                inchRow.appendChild(inchInput);
+
+                const inchLabel = document.createElement('span');
+                inchLabel.textContent = '"';
+                inchLabel.style.color = '#aaa';
+                inchLabel.style.fontSize = '12px';
+                inchLabel.style.fontWeight = 'bold';
+                inchRow.appendChild(inchLabel);
+
+                const inchUpBtn = document.createElement('button');
+                inchUpBtn.textContent = '▲';
+                inchUpBtn.style.padding = '2px 6px';
+                inchUpBtn.style.backgroundColor = '#4CAF50';
+                inchUpBtn.style.color = 'white';
+                inchUpBtn.style.border = 'none';
+                inchUpBtn.style.borderRadius = '3px';
+                inchUpBtn.style.cursor = 'pointer';
+                inchUpBtn.style.fontSize = '10px';
+                inchUpBtn.onclick = () => adjustHeight(modelId, 'inches', 1);
+                inchRow.appendChild(inchUpBtn);
+
+                heightControlsDiv.appendChild(inchRow);
+
+                // MM display
+                const mmDisplay = document.createElement('div');
+                mmDisplay.id = `mm-display-${modelId}`;
+                mmDisplay.style.color = '#4CAF50';
+                mmDisplay.style.fontSize = '10px';
+                mmDisplay.style.textAlign = 'center';
+                mmDisplay.style.marginTop = '3px';
+                mmDisplay.style.fontWeight = 'bold';
+                const currentMM = feetInchesToMM28mm(feet, inches);
+                mmDisplay.textContent = `(${currentMM.toFixed(1)}mm)`;
+                heightControlsDiv.appendChild(mmDisplay);
+            } else {
+                // For non-28mm modes (100mm cute, planter, etc.)
+                const inches = mmToInches(monsterData.originalMaxDimension);
+
+                const heightTitleLabel = document.createElement('div');
+                heightTitleLabel.textContent = 'Size';
+                heightTitleLabel.style.color = '#4CAF50';
+                heightTitleLabel.style.fontWeight = 'bold';
+                heightTitleLabel.style.fontSize = '11px';
+                heightTitleLabel.style.textAlign = 'center';
+                heightTitleLabel.style.marginBottom = '3px';
+                heightControlsDiv.appendChild(heightTitleLabel);
+
+                const inchRow = document.createElement('div');
+                inchRow.style.display = 'flex';
+                inchRow.style.alignItems = 'center';
+                inchRow.style.gap = '3px';
+                inchRow.style.justifyContent = 'center';
+
+                const inchDownBtn = document.createElement('button');
+                inchDownBtn.textContent = '▼';
+                inchDownBtn.style.padding = '2px 6px';
+                inchDownBtn.style.backgroundColor = '#4CAF50';
+                inchDownBtn.style.color = 'white';
+                inchDownBtn.style.border = 'none';
+                inchDownBtn.style.borderRadius = '3px';
+                inchDownBtn.style.cursor = 'pointer';
+                inchDownBtn.style.fontSize = '10px';
+                inchDownBtn.onclick = () => adjustHeightInches(modelId, -0.5);
+                inchRow.appendChild(inchDownBtn);
+
+                const inchInput = document.createElement('input');
+                inchInput.type = 'number';
+                inchInput.id = `inches-${modelId}`;
+                inchInput.value = inches.toFixed(1);
+                inchInput.min = 0;
+                inchInput.step = 0.1;
+                inchInput.style.width = '45px';
+                inchInput.style.padding = '3px';
+                inchInput.style.backgroundColor = '#1a1a1a';
+                inchInput.style.color = 'white';
+                inchInput.style.border = '1px solid #4CAF50';
+                inchInput.style.borderRadius = '3px';
+                inchInput.style.textAlign = 'center';
+                inchInput.style.fontSize = '12px';
+                inchInput.addEventListener('input', () => updateModelFromInputsRegular(modelId));
+                inchRow.appendChild(inchInput);
+
+                const inchLabel = document.createElement('span');
+                inchLabel.textContent = '"';
+                inchLabel.style.color = '#aaa';
+                inchLabel.style.fontSize = '12px';
+                inchLabel.style.fontWeight = 'bold';
+                inchRow.appendChild(inchLabel);
+
+                const inchUpBtn = document.createElement('button');
+                inchUpBtn.textContent = '▲';
+                inchUpBtn.style.padding = '2px 6px';
+                inchUpBtn.style.backgroundColor = '#4CAF50';
+                inchUpBtn.style.color = 'white';
+                inchUpBtn.style.border = 'none';
+                inchUpBtn.style.borderRadius = '3px';
+                inchUpBtn.style.cursor = 'pointer';
+                inchUpBtn.style.fontSize = '10px';
+                inchUpBtn.onclick = () => adjustHeightInches(modelId, 0.5);
+                inchRow.appendChild(inchUpBtn);
+
+                heightControlsDiv.appendChild(inchRow);
+
+                const mmDisplay = document.createElement('div');
+                mmDisplay.id = `mm-display-${modelId}`;
+                mmDisplay.style.color = '#4CAF50';
+                mmDisplay.style.fontSize = '10px';
+                mmDisplay.style.textAlign = 'center';
+                mmDisplay.style.marginTop = '3px';
+                mmDisplay.style.fontWeight = 'bold';
+                mmDisplay.textContent = `(${monsterData.originalMaxDimension.toFixed(1)}mm)`;
+                heightControlsDiv.appendChild(mmDisplay);
+            }
+
+            topRightControls.appendChild(heightControlsDiv);
+            canvasOverlay.appendChild(topRightControls);
+
+            // Bottom-right: Download button with descriptive text
             const downloadBtn = document.createElement('button');
             downloadBtn.id = `download-all-${modelId}`;
-            downloadBtn.textContent = '💾';
-            downloadBtn.title = 'Download JPG + PNG + STL';
+            downloadBtn.innerHTML = '💾 Download<br>STL, PNG, JPG';
+            downloadBtn.title = 'Download all files: STL model, transparent PNG render, and technical JPG render';
             downloadBtn.style.position = 'absolute';
             downloadBtn.style.bottom = '10px';
             downloadBtn.style.right = '10px';
-            downloadBtn.style.padding = '10px';
+            downloadBtn.style.padding = '8px 10px';
             downloadBtn.style.backgroundColor = 'rgba(76, 175, 80, 0.9)';
             downloadBtn.style.color = 'white';
             downloadBtn.style.border = 'none';
             downloadBtn.style.borderRadius = '5px';
             downloadBtn.style.cursor = 'pointer';
             downloadBtn.style.fontWeight = 'bold';
-            downloadBtn.style.fontSize = '16px';
+            downloadBtn.style.fontSize = '11px';
+            downloadBtn.style.lineHeight = '1.3';
+            downloadBtn.style.textAlign = 'center';
             downloadBtn.style.pointerEvents = 'auto';
             downloadBtn.onclick = () => downloadModelAndScreenshot(modelId);
             canvasOverlay.appendChild(downloadBtn);
@@ -2418,59 +2740,8 @@
             viewport.appendChild(canvasOverlay);
             card.appendChild(viewport);
 
-            // CUT MODE CONTROLS (Apply/Undo/Flatness) - ABOVE Z-ROTATION
-            const cutModeActionsContainer = document.createElement('div');
-            cutModeActionsContainer.className = 'cut-controls-container';
-            cutModeActionsContainer.style.marginTop = '10px';
-
-            // Apply Cut and Undo Buttons (side by side)
-            const cutButtonsRow = document.createElement('div');
-            cutButtonsRow.style.display = 'flex';
-            cutButtonsRow.style.gap = '8px';
-
-            const cutButton = document.createElement('button');
-            cutButton.id = `cut-button-${modelId}`;
-            cutButton.className = 'btn-cut';
-            cutButton.textContent = '✂️ Apply Cut';
-            cutButton.style.flex = '1';
-            cutButton.style.padding = '10px';
-            cutButton.style.backgroundColor = '#FF9800';
-            cutButton.style.color = 'white';
-            cutButton.style.border = 'none';
-            cutButton.style.borderRadius = '5px';
-            cutButton.style.cursor = 'pointer';
-            cutButton.style.fontWeight = 'bold';
-            cutButton.onclick = () => applyCutToModel(modelId);
-            cutButtonsRow.appendChild(cutButton);
-
-            const undoButton = document.createElement('button');
-            undoButton.id = `undo-cut-${modelId}`;
-            undoButton.className = 'btn-undo';
-            undoButton.textContent = '↩️ Undo';
-            undoButton.style.flex = '0.6';
-            undoButton.style.padding = '10px';
-            undoButton.style.backgroundColor = '#757575';
-            undoButton.style.color = 'white';
-            undoButton.style.border = 'none';
-            undoButton.style.borderRadius = '5px';
-            undoButton.style.cursor = 'pointer';
-            undoButton.style.fontWeight = 'bold';
-            undoButton.disabled = true;
-            undoButton.style.opacity = '0.5';
-            undoButton.onclick = () => undoCut(modelId);
-            cutButtonsRow.appendChild(undoButton);
-
-            cutModeActionsContainer.appendChild(cutButtonsRow);
-
-            // Flatness Status Display
-            const flatnessStatus = document.createElement('div');
-            flatnessStatus.id = `flatness-${modelId}`;
-            flatnessStatus.className = 'flatness-status';
-            flatnessStatus.textContent = '⚙️ Ready for Cut';
-            flatnessStatus.style.marginTop = '8px';
-            cutModeActionsContainer.appendChild(flatnessStatus);
-
-            card.appendChild(cutModeActionsContainer);
+            // Cut mode controls moved to top-left overlay above
+            // Flatness status removed - flatness info now shown via viewport border color
 
             // Z-AXIS ROTATION (BLUE) - Turntable/Floor Rotation - MOVED TO TOP
             // NOTE: This is actually Y-axis rotation in the 3D engine, but we call it Z-axis
@@ -3157,15 +3428,27 @@
                 stage.updateManPosition();
                 stage.recenterCurrentView();
                 stage.render();
+
+                // Hide cut mode UI after successful cut
                 const cutModeCheckbox = document.getElementById(`cut-mode-${modelId}`);
                 if (cutModeCheckbox && cutModeCheckbox.checked) {
                     cutModeCheckbox.checked = false;
                     stage.toggleCutMode(false);
-                    const cutHeightControls = document.getElementById(`cut-height-controls-${modelId}`);
-                    if (cutHeightControls) {
-                        cutHeightControls.classList.remove('active');
+
+                    // Hide cut height adjuster overlay
+                    const cutHeightOverlay = document.getElementById(`cut-height-overlay-${modelId}`);
+                    if (cutHeightOverlay) {
+                        cutHeightOverlay.style.display = 'none';
+                    }
+
+                    // Hide cut buttons overlay (Apply Cut & Undo)
+                    const cutButtonsOverlay = document.getElementById(`cut-buttons-overlay-${modelId}`);
+                    if (cutButtonsOverlay) {
+                        cutButtonsOverlay.style.display = 'none';
                     }
                 }
+
+                // Update cut button status
                 if (cutButton) {
                     cutButton.textContent = '✅ Cut Applied!';
                     cutButton.style.backgroundColor = '#4CAF50';
@@ -3183,7 +3466,7 @@
                     undoButton.style.opacity = '1';
                 }
 
-                console.log('Cut operation completed successfully!');
+                console.log('✅ Cut operation completed successfully!');
             } catch (error) {
                 console.error('Error during cut operation:', error);
                 alert('Error cutting model: ' + error.message);
