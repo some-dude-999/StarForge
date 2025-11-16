@@ -1655,13 +1655,77 @@
                 }
                 await new Promise(resolve => setTimeout(resolve, 10));
             }
+
+            // Auto-mark remaining duplicates after all files are processed
+            if (autoMarkEnabled) {
+                await autoMarkRemainingDuplicates();
+            }
+
             progressContainer.style.display = 'none';
             updateStats();
             updateTableHighlighting(); // Apply color highlighting
-            
+
             document.getElementById('clearBtn').disabled = false;
             document.getElementById('downloadAllBtn').disabled = false;
             document.getElementById('recheckBtn').disabled = false;
+        }
+
+        async function autoMarkRemainingDuplicates() {
+            // Group all duplicates to ensure all but one in each group are marked
+            const duplicateGroups = new Map();
+
+            for (let model of modelData) {
+                if (!model.isDuplicate) continue;
+                if (markedDuplicates.has(model.filename)) continue;
+
+                // Find all files that match this one (name+size OR name+pixel)
+                const matches = [];
+
+                for (let other of modelData) {
+                    if (model.filename === other.filename) {
+                        matches.push(other);
+                        continue;
+                    }
+
+                    if (!other.isDuplicate) continue;
+
+                    // Check if they match by name+size
+                    if (model.normalizedName === other.normalizedName &&
+                        model.filesize === other.filesize) {
+                        matches.push(other);
+                        continue;
+                    }
+
+                    // Check if they match by name+pixel (if not already matched by size)
+                    if (model.normalizedName === other.normalizedName &&
+                        model.screenshot && other.screenshot) {
+                        const pixelMatch = await compareImages(model.screenshot, other.screenshot);
+                        if (pixelMatch) {
+                            matches.push(other);
+                        }
+                    }
+                }
+
+                // Sort matches alphabetically
+                matches.sort((a, b) => a.filename.localeCompare(b.filename));
+
+                // Create a key for this group (use first filename alphabetically)
+                if (matches.length > 1) {
+                    const groupKey = matches[0].filename;
+                    if (!duplicateGroups.has(groupKey)) {
+                        duplicateGroups.set(groupKey, matches);
+                    }
+                }
+            }
+
+            // Mark all files except the first in each group
+            for (let [groupKey, group] of duplicateGroups) {
+                for (let i = 1; i < group.length; i++) {
+                    if (!markedDuplicates.has(group[i].filename)) {
+                        markAsDuplicate(group[i].filename, group[0].filename);
+                    }
+                }
+            }
         }
         function addModelToTable(model) {
             // Don't add if it's a bad file
