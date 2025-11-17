@@ -1477,15 +1477,9 @@
                 const viewport = document.getElementById(`viewport-${modelData.id}`);
 
                 if (status && flatness) {
-                    // Get floating region info from the global models Map
-                    const globalModelData = models.get(modelData.id);
-                    const floatingMsg = globalModelData && globalModelData.floatingPartsRemoved
-                        ? ' - Floating regions removed'
-                        : ' - No floating regions';
-
                     if (flatness.isFlat) {
-                        // Model is FLAT - show green border and detailed flatness info
-                        status.textContent = `✓ Flat: ${flatness.area.toFixed(0)}mm² contact area, ${(flatness.yRange * 1000).toFixed(2)}µm variation${floatingMsg}`;
+                        // Model is FLAT - show green border
+                        status.textContent = `✓ Flat`;
                         status.className = 'alignment-status';
                         if (viewport) {
                             viewport.style.borderColor = '#4CAF50'; // Green border
@@ -1493,7 +1487,7 @@
                         }
                     } else {
                         // Model is NOT FLAT - show red border and reason
-                        status.textContent = `⚠ Not Flat: ${flatness.reason}${floatingMsg}`;
+                        status.textContent = `⚠ Not Flat: ${flatness.reason}`;
                         status.className = 'alignment-status not-flat';
                         if (viewport) {
                             viewport.style.borderColor = '#f44336'; // Red border
@@ -3068,7 +3062,7 @@
             flatnessStatusOverlay.style.fontSize = '12px';
             flatnessStatusOverlay.style.padding = '6px 12px';
             flatnessStatusOverlay.style.margin = '0';
-            flatnessStatusOverlay.textContent = '⚙️ Ready for Cut';
+            flatnessStatusOverlay.textContent = '';
             bottomCenterControls.appendChild(flatnessStatusOverlay);
             canvasOverlay.appendChild(bottomCenterControls);
 
@@ -4191,7 +4185,7 @@
             const flatnessEl = document.getElementById(`flatness-${modelId}`);
             if (flatnessEl) {
                 flatnessEl.className = 'flatness-status';
-                flatnessEl.textContent = '⚙️ Ready for Cut';
+                flatnessEl.textContent = '';
             }
 
             // Update buttons
@@ -4469,7 +4463,7 @@
                 if (flatnessEl) {
                     if (flatnessResult.isFlat) {
                         flatnessEl.className = 'flatness-status flat';
-                        flatnessEl.textContent = '✓ Bottom Flat (After Cut)';
+                        flatnessEl.textContent = '✓ Flat';
                     } else {
                         flatnessEl.className = 'flatness-status not-flat';
                         flatnessEl.textContent = `⚠ Not Flat: ${flatnessResult.reason}`;
