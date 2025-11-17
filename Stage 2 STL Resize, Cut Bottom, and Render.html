@@ -3368,23 +3368,35 @@
                 const deltaY = e.clientY - previousMousePosition.y;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
 
-                // Directly update mesh rotation for smooth real-time feedback
+                // Update rotation like Stage 1: deltaX affects Z, deltaY affects Y
                 const modelData = models.get(modelId);
-                if (modelData && modelData.mesh) {
-                    const rotationSpeed = 0.01; // radians per pixel
+                if (modelData) {
+                    const rotationSpeed = 0.5; // degrees per pixel (same as Stage 1)
 
-                    // Apply rotation directly to mesh quaternion
-                    const euler = new THREE.Euler().setFromQuaternion(modelData.mesh.quaternion, 'XYZ');
-                    euler.y += deltaX * rotationSpeed;
-                    euler.x -= deltaY * rotationSpeed;
-                    modelData.mesh.quaternion.setFromEuler(euler);
-                    modelData.mesh.updateMatrixWorld(true);
+                    // Stage 1 style: horizontal movement = Z rotation, vertical movement = Y rotation
+                    let newRotationZ = (modelData.rotationZ || 0) + deltaX * rotationSpeed;
+                    let newRotationY = (modelData.rotationY || 0) + deltaY * rotationSpeed;
 
-                    // Update the stage rendering
-                    const stageIndex = modelData.stageIndex;
-                    if (stages[stageIndex]) {
-                        stages[stageIndex].render();
+                    // Clamp values between -180 and 180
+                    newRotationZ = Math.max(-180, Math.min(180, newRotationZ));
+                    newRotationY = Math.max(-180, Math.min(180, newRotationY));
+
+                    // Update sliders and labels in real-time
+                    const zSlider = document.getElementById(`z-rotation-${modelId}`);
+                    const ySlider = document.getElementById(`y-rotation-${modelId}`);
+
+                    if (zSlider) {
+                        zSlider.value = newRotationZ;
+                        document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${Math.round(newRotationZ)}°`;
                     }
+                    if (ySlider) {
+                        ySlider.value = newRotationY;
+                        document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${Math.round(newRotationY)}°`;
+                    }
+
+                    // Update the model rotation using the existing function
+                    updateModelRotation(modelId, 'z', newRotationZ);
+                    updateModelRotation(modelId, 'y', newRotationY);
                 }
                 e.preventDefault();
             });
@@ -3394,38 +3406,9 @@
                     isDragging = false;
                     viewport.style.cursor = 'grab';
 
-                    // Now update sliders and do full recalculation
+                    // Bake rotation when mouse is released
                     const modelData = models.get(modelId);
-                    if (modelData && modelData.mesh) {
-                        const euler = new THREE.Euler().setFromQuaternion(modelData.mesh.quaternion, 'XYZ');
-                        const degreesX = THREE.MathUtils.radToDeg(euler.x);
-                        const degreesY = THREE.MathUtils.radToDeg(euler.y);
-                        const degreesZ = THREE.MathUtils.radToDeg(euler.z);
-
-                        // Update sliders to match current rotation
-                        const ySlider = document.getElementById(`y-rotation-${modelId}`);
-                        const xSlider = document.getElementById(`x-rotation-${modelId}`);
-                        const zSlider = document.getElementById(`z-rotation-${modelId}`);
-
-                        if (ySlider) {
-                            ySlider.value = degreesY;
-                            document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${Math.round(degreesY)}°`;
-                        }
-                        if (xSlider) {
-                            xSlider.value = degreesX;
-                            document.getElementById(`x-label-${modelId}`).textContent = `X-Axis (Pitch): ${Math.round(degreesX)}°`;
-                        }
-                        if (zSlider) {
-                            zSlider.value = degreesZ;
-                            document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${Math.round(degreesZ)}°`;
-                        }
-
-                        // Update model data
-                        modelData.rotationX = degreesX;
-                        modelData.rotationY = degreesY;
-                        modelData.rotationZ = degreesZ;
-
-                        // Bake rotation for proper alignment and flatness checks
+                    if (modelData) {
                         bakeRotation(modelId);
                     }
                 }
