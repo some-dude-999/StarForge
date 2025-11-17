@@ -3585,6 +3585,30 @@
                 const stage = stages[modelData.stageIndex];
                 if (!stage) return;
 
+                // Disable cut mode if it's enabled
+                const cutModeCheckbox = document.getElementById(`cut-mode-${modelId}`);
+                if (cutModeCheckbox && cutModeCheckbox.checked) {
+                    cutModeCheckbox.checked = false;
+                    stage.toggleCutMode(false);
+
+                    // Hide cut mode controls
+                    const cutHeightControls = document.getElementById(`cut-height-overlay-${modelId}`);
+                    if (cutHeightControls) cutHeightControls.style.display = 'none';
+
+                    const cutButtonsControls = document.getElementById(`cut-buttons-overlay-${modelId}`);
+                    if (cutButtonsControls) cutButtonsControls.style.display = 'none';
+
+                    const cutWarning = document.getElementById(`cut-warning-${modelId}`);
+                    if (cutWarning) cutWarning.style.display = 'none';
+
+                    // Show download button and flatness status
+                    const downloadBtn = document.getElementById(`download-all-${modelId}`);
+                    if (downloadBtn) downloadBtn.style.display = 'block';
+
+                    const flatnessStatus = document.getElementById(`flatness-${modelId}`);
+                    if (flatnessStatus) flatnessStatus.style.display = 'block';
+                }
+
                 // Remove old mesh from scene
                 stage.scene.remove(modelData.mesh);
 
@@ -3628,8 +3652,13 @@
                     stage.models[modelIndex].mesh = newMesh;
                 }
 
-                // Realign to ground
+                // Realign to ground (just like fresh import)
                 stage.alignToGround(newMesh);
+
+                // Check flatness (just like fresh import)
+                const flatnessResult = stage.checkFlatness(newMesh);
+                stage.flatnessStatus.set(modelId, flatnessResult);
+                stage.updateFlatnessDisplay();
 
                 // Reset UI sliders to initial values
                 xRotationSlider.value = initialRotation.x;
@@ -3641,15 +3670,16 @@
                 zRotationSlider.value = initialRotation.z;
                 document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${initialRotation.z}°`;
 
-                // Update rotation to initial Y rotation
-                updateModelRotation(modelId, 'y', 125);
-
                 // Update all UI and visuals
                 updateAllUIForModel(modelId);
                 stage.updateHeightLabel(modelId, newMesh);
-                stage.recenterCurrentView();
                 stage.updateManPosition();
-                stage.render();
+
+                // Fit camera view (just like fresh import) - this is crucial!
+                stage.fitAllModelsAndManInView();
+
+                // Apply the initial 125-degree Y rotation (just like fresh import)
+                updateModelRotation(modelId, 'y', 125);
 
                 console.log('✅ Model fully reset to original import state');
             };
