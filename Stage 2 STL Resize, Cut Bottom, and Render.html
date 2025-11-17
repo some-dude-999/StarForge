@@ -3316,32 +3316,31 @@
             const freeRotationDiv = document.createElement('div');
             freeRotationDiv.style.display = 'flex';
             freeRotationDiv.style.alignItems = 'center';
-            freeRotationDiv.style.gap = '8px';
-            freeRotationDiv.style.marginBottom = '10px';
-            freeRotationDiv.style.padding = '8px';
-            freeRotationDiv.style.backgroundColor = 'rgba(42, 42, 42, 0.8)';
+            freeRotationDiv.style.gap = '5px';
+            freeRotationDiv.style.padding = '5px';
+            freeRotationDiv.style.backgroundColor = 'rgba(42, 42, 42, 0.9)';
             freeRotationDiv.style.borderRadius = '5px';
             freeRotationDiv.style.border = '2px solid #2196F3';
 
             const freeRotationCheckbox = document.createElement('input');
             freeRotationCheckbox.type = 'checkbox';
             freeRotationCheckbox.id = `free-rotation-${modelId}`;
-            freeRotationCheckbox.style.width = '18px';
-            freeRotationCheckbox.style.height = '18px';
+            freeRotationCheckbox.style.width = '16px';
+            freeRotationCheckbox.style.height = '16px';
             freeRotationCheckbox.style.cursor = 'pointer';
 
             const freeRotationLabel = document.createElement('label');
             freeRotationLabel.setAttribute('for', `free-rotation-${modelId}`);
-            freeRotationLabel.textContent = '🔄 Free Rotation Mode (Drag to Rotate)';
+            freeRotationLabel.textContent = 'Free Rotate';
             freeRotationLabel.style.color = '#2196F3';
             freeRotationLabel.style.fontWeight = 'bold';
-            freeRotationLabel.style.fontSize = '13px';
+            freeRotationLabel.style.fontSize = '11px';
             freeRotationLabel.style.cursor = 'pointer';
             freeRotationLabel.style.userSelect = 'none';
 
             freeRotationDiv.appendChild(freeRotationCheckbox);
             freeRotationDiv.appendChild(freeRotationLabel);
-            card.appendChild(freeRotationDiv);
+            topRightControls.appendChild(freeRotationDiv);
 
             // FREE ROTATION MODE - Mouse drag controls
             let isDragging = false;
@@ -3368,14 +3367,14 @@
                 const deltaY = e.clientY - previousMousePosition.y;
                 previousMousePosition = { x: e.clientX, y: e.clientY };
 
-                // Update rotation like Stage 1: deltaX affects Z, deltaY affects Y
+                // Update rotation: deltaX affects Y (turntable), deltaY affects Z (roll)
                 const modelData = models.get(modelId);
                 if (modelData) {
-                    const rotationSpeed = 0.5; // degrees per pixel (same as Stage 1)
+                    const rotationSpeed = 0.5; // degrees per pixel
 
-                    // Stage 1 style: horizontal movement = Z rotation, vertical movement = Y rotation
-                    let newRotationZ = (modelData.rotationZ || 0) + deltaX * rotationSpeed;
-                    let newRotationY = (modelData.rotationY || 0) + deltaY * rotationSpeed;
+                    // Horizontal mouse movement = Y rotation (turntable), vertical movement = Z rotation (roll)
+                    let newRotationY = (modelData.rotationY || 0) + deltaX * rotationSpeed;
+                    let newRotationZ = (modelData.rotationZ || 0) + deltaY * rotationSpeed;
 
                     // Clamp values between -180 and 180
                     newRotationZ = Math.max(-180, Math.min(180, newRotationZ));
