@@ -3344,8 +3344,8 @@
 
             // RESET ROTATION BUTTON
             const resetRotationBtn = document.createElement('button');
-            resetRotationBtn.textContent = '↺ Reset';
-            resetRotationBtn.title = 'Reset rotation to initial position';
+            resetRotationBtn.textContent = 'Full Reset Model';
+            resetRotationBtn.title = 'Reset model to original import state (clears all cuts and rotations)';
             resetRotationBtn.style.padding = '5px 12px';
             resetRotationBtn.style.backgroundColor = '#FF9800';
             resetRotationBtn.style.color = 'white';
@@ -3577,26 +3577,81 @@
                 z: parseFloat(zRotationSlider.value)
             };
 
-            // RESET ROTATION BUTTON CLICK HANDLER (set up after sliders exist)
+            // FULL RESET MODEL BUTTON CLICK HANDLER (set up after sliders exist)
             resetRotationBtn.onclick = () => {
                 const modelData = models.get(modelId);
                 if (!modelData) return;
 
-                // Reset all three axes to initial values
+                const stage = stages[modelData.stageIndex];
+                if (!stage) return;
+
+                // Remove old mesh from scene
+                stage.scene.remove(modelData.mesh);
+
+                // Dispose of old geometry if it's been modified
+                if (modelData.mesh.geometry !== modelData.originalGeometry) {
+                    modelData.mesh.geometry.dispose();
+                }
+
+                // Create fresh mesh from original geometry
+                const newMesh = new THREE.Mesh(
+                    modelData.originalGeometry,
+                    modelData.mesh.material.clone()
+                );
+                newMesh.name = modelId;
+                newMesh.castShadow = true;
+                newMesh.receiveShadow = true;
+
+                // Apply initial scale
+                const resetScale = modelData.initialScale;
+                newMesh.scale.set(resetScale, resetScale, resetScale);
+
+                // Reset rotation to identity
+                newMesh.rotation.set(0, 0, 0);
+                newMesh.updateMatrixWorld(true);
+
+                // Update model data
+                modelData.mesh = newMesh;
+                modelData.scale = resetScale;
+                modelData.rotationX = 0;
+                modelData.rotationY = 125;
+                modelData.rotationZ = 0;
+                modelData.baseModelRotation.copy(newMesh.quaternion);
+                modelData.baseBoundingBoxRotation.identity();
+
+                // Add new mesh to scene
+                stage.scene.add(newMesh);
+
+                // Update stage's models array
+                const modelIndex = stage.models.findIndex(m => m.id === modelId);
+                if (modelIndex !== -1) {
+                    stage.models[modelIndex].mesh = newMesh;
+                }
+
+                // Realign to ground
+                stage.alignToGround(newMesh);
+
+                // Reset UI sliders to initial values
                 xRotationSlider.value = initialRotation.x;
                 document.getElementById(`x-label-${modelId}`).textContent = `X-Axis (Pitch): ${initialRotation.x}°`;
-                updateModelRotation(modelId, 'x', initialRotation.x);
 
                 yRotationSlider.value = initialRotation.y;
                 document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${initialRotation.y}°`;
-                updateModelRotation(modelId, 'y', initialRotation.y);
 
                 zRotationSlider.value = initialRotation.z;
                 document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${initialRotation.z}°`;
-                updateModelRotation(modelId, 'z', initialRotation.z);
 
-                // Bake the rotation after reset
-                bakeRotation(modelId);
+                // Update rotation to initial Y rotation
+                updateModelRotation(modelId, 'y', 125);
+
+                // Update all UI and visuals
+                updateAllUIForModel(modelId);
+                stage.updateHeightLabel(modelId, newMesh);
+                stage.recenterCurrentView();
+                stage.updateManPosition();
+                stage.render();
+
+                console.log('✅ Model fully reset to original import state');
             };
 
             document.getElementById('stages-container').appendChild(card);
@@ -3639,7 +3694,9 @@
                 originalMaxDimension: monsterData.originalMaxDimension,
                 scaleMode: scaleMode,
                 floatingPartsRemoved: monsterData.floatingPartsRemoved || false,
-                componentsFound: monsterData.componentsFound || 1
+                componentsFound: monsterData.componentsFound || 1,
+                initialTargetHeightMM: targetHeightMM,
+                initialScale: initialScale
             });
             if (initialScale !== 1) {
                 clonedMesh.scale.set(initialScale, initialScale, initialScale);
