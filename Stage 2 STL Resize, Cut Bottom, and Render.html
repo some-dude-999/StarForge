@@ -3342,10 +3342,62 @@
             freeRotationDiv.appendChild(freeRotationLabel);
             topRightControls.appendChild(freeRotationDiv);
 
+            // RESET ROTATION BUTTON
+            const resetRotationBtn = document.createElement('button');
+            resetRotationBtn.textContent = '↺ Reset';
+            resetRotationBtn.title = 'Reset rotation to initial position';
+            resetRotationBtn.style.padding = '5px 12px';
+            resetRotationBtn.style.backgroundColor = '#FF9800';
+            resetRotationBtn.style.color = 'white';
+            resetRotationBtn.style.border = 'none';
+            resetRotationBtn.style.borderRadius = '3px';
+            resetRotationBtn.style.cursor = 'pointer';
+            resetRotationBtn.style.fontWeight = 'bold';
+            resetRotationBtn.style.fontSize = '11px';
+            resetRotationBtn.style.width = '100%';
+            topRightControls.appendChild(resetRotationBtn);
+
             // FREE ROTATION MODE - Mouse drag controls
             let isDragging = false;
             let previousMousePosition = { x: 0, y: 0 };
             let freeRotationEnabled = false;
+
+            // Store initial rotation values for reset
+            const initialRotation = {
+                x: 0,
+                y: 125,
+                z: 0
+            };
+
+            // Reset rotation button click handler
+            resetRotationBtn.onclick = () => {
+                const modelData = models.get(modelId);
+                if (!modelData) return;
+
+                // Reset all three axes to initial values
+                const xSlider = document.getElementById(`x-rotation-${modelId}`);
+                const ySlider = document.getElementById(`y-rotation-${modelId}`);
+                const zSlider = document.getElementById(`z-rotation-${modelId}`);
+
+                if (xSlider) {
+                    xSlider.value = initialRotation.x;
+                    document.getElementById(`x-label-${modelId}`).textContent = `X-Axis (Pitch): ${initialRotation.x}°`;
+                    updateModelRotation(modelId, 'x', initialRotation.x);
+                }
+                if (ySlider) {
+                    ySlider.value = initialRotation.y;
+                    document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${initialRotation.y}°`;
+                    updateModelRotation(modelId, 'y', initialRotation.y);
+                }
+                if (zSlider) {
+                    zSlider.value = initialRotation.z;
+                    document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${initialRotation.z}°`;
+                    updateModelRotation(modelId, 'z', initialRotation.z);
+                }
+
+                // Bake the rotation after reset
+                bakeRotation(modelId);
+            };
 
             freeRotationCheckbox.addEventListener('change', (e) => {
                 freeRotationEnabled = e.target.checked;
@@ -3374,7 +3426,7 @@
 
                     // Horizontal mouse movement = Y rotation (turntable), vertical movement = Z rotation (roll)
                     let newRotationY = (modelData.rotationY || 0) + deltaX * rotationSpeed;
-                    let newRotationZ = (modelData.rotationZ || 0) + deltaY * rotationSpeed;
+                    let newRotationZ = (modelData.rotationZ || 0) - deltaY * rotationSpeed; // Inverted for natural movement
 
                     // Clamp values between -180 and 180
                     newRotationZ = Math.max(-180, Math.min(180, newRotationZ));
@@ -3418,6 +3470,53 @@
                     isDragging = false;
                     viewport.style.cursor = 'grab';
                 }
+            });
+
+            // KEYBOARD ARROW KEY SUPPORT for free rotation
+            const keyboardRotationSpeed = 5; // degrees per key press
+            document.addEventListener('keydown', (e) => {
+                if (!freeRotationEnabled) return;
+                if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) return;
+
+                const modelData = models.get(modelId);
+                if (!modelData) return;
+
+                let newRotationY = modelData.rotationY || 0;
+                let newRotationZ = modelData.rotationZ || 0;
+
+                // Arrow keys: Left/Right = Y rotation, Up/Down = Z rotation
+                if (e.key === 'ArrowLeft') {
+                    newRotationY -= keyboardRotationSpeed;
+                } else if (e.key === 'ArrowRight') {
+                    newRotationY += keyboardRotationSpeed;
+                } else if (e.key === 'ArrowUp') {
+                    newRotationZ += keyboardRotationSpeed; // Up increases Z
+                } else if (e.key === 'ArrowDown') {
+                    newRotationZ -= keyboardRotationSpeed; // Down decreases Z
+                }
+
+                // Clamp values between -180 and 180
+                newRotationZ = Math.max(-180, Math.min(180, newRotationZ));
+                newRotationY = Math.max(-180, Math.min(180, newRotationY));
+
+                // Update sliders and labels
+                const zSlider = document.getElementById(`z-rotation-${modelId}`);
+                const ySlider = document.getElementById(`y-rotation-${modelId}`);
+
+                if (zSlider) {
+                    zSlider.value = newRotationZ;
+                    document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${Math.round(newRotationZ)}°`;
+                }
+                if (ySlider) {
+                    ySlider.value = newRotationY;
+                    document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${Math.round(newRotationY)}°`;
+                }
+
+                // Update the model rotation
+                updateModelRotation(modelId, 'z', newRotationZ);
+                updateModelRotation(modelId, 'y', newRotationY);
+
+                e.preventDefault();
             });
 
             // Y-AXIS ROTATION (GREEN) - Turntable/Floor Rotation - MOVED TO TOP
