@@ -3362,43 +3362,6 @@
             let previousMousePosition = { x: 0, y: 0 };
             let freeRotationEnabled = false;
 
-            // Store initial rotation values for reset
-            const initialRotation = {
-                x: 0,
-                y: 125,
-                z: 0
-            };
-
-            // Reset rotation button click handler
-            resetRotationBtn.onclick = () => {
-                const modelData = models.get(modelId);
-                if (!modelData) return;
-
-                // Reset all three axes to initial values
-                const xSlider = document.getElementById(`x-rotation-${modelId}`);
-                const ySlider = document.getElementById(`y-rotation-${modelId}`);
-                const zSlider = document.getElementById(`z-rotation-${modelId}`);
-
-                if (xSlider) {
-                    xSlider.value = initialRotation.x;
-                    document.getElementById(`x-label-${modelId}`).textContent = `X-Axis (Pitch): ${initialRotation.x}°`;
-                    updateModelRotation(modelId, 'x', initialRotation.x);
-                }
-                if (ySlider) {
-                    ySlider.value = initialRotation.y;
-                    document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${initialRotation.y}°`;
-                    updateModelRotation(modelId, 'y', initialRotation.y);
-                }
-                if (zSlider) {
-                    zSlider.value = initialRotation.z;
-                    document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${initialRotation.z}°`;
-                    updateModelRotation(modelId, 'z', initialRotation.z);
-                }
-
-                // Bake the rotation after reset
-                bakeRotation(modelId);
-            };
-
             freeRotationCheckbox.addEventListener('change', (e) => {
                 freeRotationEnabled = e.target.checked;
                 viewport.style.cursor = freeRotationEnabled ? 'grab' : 'default';
@@ -3606,6 +3569,35 @@
             xzRotationRow.appendChild(zRotationControls);
 
             card.appendChild(xzRotationRow);
+
+            // CAPTURE INITIAL ROTATION VALUES FOR RESET (after sliders are created)
+            const initialRotation = {
+                x: parseFloat(xRotationSlider.value),
+                y: parseFloat(yRotationSlider.value),
+                z: parseFloat(zRotationSlider.value)
+            };
+
+            // RESET ROTATION BUTTON CLICK HANDLER (set up after sliders exist)
+            resetRotationBtn.onclick = () => {
+                const modelData = models.get(modelId);
+                if (!modelData) return;
+
+                // Reset all three axes to initial values
+                xRotationSlider.value = initialRotation.x;
+                document.getElementById(`x-label-${modelId}`).textContent = `X-Axis (Pitch): ${initialRotation.x}°`;
+                updateModelRotation(modelId, 'x', initialRotation.x);
+
+                yRotationSlider.value = initialRotation.y;
+                document.getElementById(`y-label-${modelId}`).textContent = `Y-Axis Rotation (Turntable): ${initialRotation.y}°`;
+                updateModelRotation(modelId, 'y', initialRotation.y);
+
+                zRotationSlider.value = initialRotation.z;
+                document.getElementById(`z-label-${modelId}`).textContent = `Z-Axis (Roll): ${initialRotation.z}°`;
+                updateModelRotation(modelId, 'z', initialRotation.z);
+
+                // Bake the rotation after reset
+                bakeRotation(modelId);
+            };
 
             document.getElementById('stages-container').appendChild(card);
             // Initialize stage and add model
