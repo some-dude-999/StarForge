@@ -3618,6 +3618,8 @@
                 }
 
                 // Create fresh mesh from original geometry
+                // Note: originalGeometry has +90 degrees baked in (rotateX(Math.PI/2) at line 3714)
+                // We need to apply -90 to the mesh to compensate and match the original clonedMesh
                 const newMesh = new THREE.Mesh(
                     modelData.originalGeometry,
                     modelData.mesh.material.clone()
@@ -3630,8 +3632,10 @@
                 const resetScale = modelData.initialScale;
                 newMesh.scale.set(resetScale, resetScale, resetScale);
 
-                // Reset rotation to identity
-                newMesh.rotation.set(0, 0, 0);
+                // Apply -90 degrees on X to compensate for the +90 baked into originalGeometry
+                newMesh.rotation.x = -Math.PI / 2;
+                newMesh.rotation.y = 0;
+                newMesh.rotation.z = 0;
                 newMesh.updateMatrixWorld(true);
 
                 // Update model data
