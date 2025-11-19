@@ -1,0 +1,225 @@
+=== Stage 2 STL Resize, Cut Bottom, and Render.txt ===
+PROJECT: SFK (Starforge Forge Kit)
+COMPONENT: 28mm STL Scaler with Reference Man Overlay
+CREATED: 2025-11-19
+LAST UPDATED: 2025-11-19 - Initial documentation created
+
+DATA SOURCES:
+- User Input: STL files (binary or ASCII format) from Stage 1 or direct upload
+- User Input: Target height in various formats (mm, feet/inches, decimal inches)
+- User Input: Rotation values (X, Y, Z axis in degrees)
+- User Input: Cut height and rotation parameters
+- External Library: Three.js r128 (from cdnjs.cloudflare.com)
+- External Library: Earcut 2.2.4 (from jsdelivr.net) for polygon triangulation
+- Built-in Asset: Reference man overlay STL (embedded base64 data)
+
+FUNCTIONALITY:
+- Main Purpose: Resize 3D models to tabletop gaming standards (28mm scale), cut bases, rotate freely, and render for product photos
+- Key Functions:
+  * Measurement Conversions:
+    - feetInchesToMM28mm(feet, inches) - Convert real-world measurements to 28mm scale
+    - mm28mmToFeetInches(mm28) - Convert 28mm scale back to real-world feet/inches
+    - inchesToMM(inches) - Convert decimal inches to mm
+    - mmToInches(mm) - Convert mm to decimal inches
+    - formatFeetInches(feet, inches) - Display formatter
+    - formatInches(inches) - Display formatter
+
+  * STL Processing:
+    - parseSTL(buffer) - Auto-detect binary vs ASCII format
+    - parseBinarySTL(buffer) - Parse binary STL files
+    - parseASCIISTL(text) - Parse ASCII STL files
+
+  * Model Processing Pipeline:
+    - processWithScale(targetHeightMM, scaleMode, buttonId) - Main processing entry point
+    - processModels(filesToProcess, targetHeightMM, scaleMode, startIdx) - Batch processor
+    - createModelCard(monsterData, stageIndex, targetHeightMM, scaleMode) - Generate UI card with 3D viewer
+
+  * Geometry Manipulation:
+    - applyCutToModel(modelId) - Slice model at specified height using plane intersection
+    - undoCut(modelId) - Restore original geometry before cut
+    - fixNormals(geometry) - Recalculate face normals after cutting (ensures proper lighting)
+    - removeFloatingParts(geometry) - Detect and remove disconnected geometry above cut plane
+    - bakeRotation(modelId) - Apply rotation permanently to geometry
+
+  * Rotation Controls:
+    - updateModelRotation(modelId, axis, degrees, showHelpers) - Rotate model on X/Y/Z axis
+    - Free rotation mode with keyboard support (Arrow keys, A/D, W/S, Q/E)
+    - Visual rotation helpers (axis indicators)
+
+  * UI & Display:
+    - updateModelFromInputs(modelId) - Sync UI inputs with model state
+    - updateAllUIForModel(modelId) - Refresh all UI elements for model
+    - updatePageDisplay() - Paginated view of processed models
+    - updateModelCount() - Statistics display
+    - showToast(message) - User notifications
+
+  * Export & Download:
+    - downloadModelAndScreenshot(modelId) - Export modified STL + PNG screenshot
+    - downloadAllModelsOnCurrentPage() - Batch export visible models
+    - Screenshot: 2048x2048 PNG with transparent background
+
+  * Reference Overlay:
+    - Toggle reference man on/off
+    - Helps visualize scale accuracy for miniatures
+
+SCALE MODES:
+1. "Absolute Height" - Scale model to exact target height in mm
+2. "Add to Height" - Increase current height by specified amount
+3. "Subtract from Height" - Decrease current height by specified amount
+
+MEASUREMENT SYSTEMS:
+- 28mm scale (gaming miniatures standard)
+- Real-world feet and inches (converted to 28mm scale)
+- Decimal inches (converted to 28mm scale)
+- Direct millimeters
+
+CUT BOTTOM FEATURE:
+- Purpose: Remove bases/stands from miniatures
+- Algorithm:
+  1. Create cutting plane at specified height
+  2. For each triangle, determine if above/below/intersecting plane
+  3. Keep triangles above plane
+  4. For intersecting triangles, calculate intersection points
+  5. Use Earcut library to triangulate new cap faces
+  6. Fix normals on cut surface
+  7. Remove floating disconnected parts
+- Rotation: Can rotate model before cutting for angled cuts
+- Undo: Preserves original geometry for reverting
+
+ROTATION SYSTEM:
+- Three rotation modes:
+  1. Input fields (precise degree values)
+  2. +15°/-15° buttons (quick adjustments)
+  3. Free rotation keyboard controls
+- Keyboard Controls:
+  * Arrow Up/Down: Rotate around X-axis
+  * Arrow Left/Right: Rotate around Y-axis
+  * A/D: Rotate around Z-axis
+  * W/S: Alternative X-axis rotation
+  * Q/E: Alternative Z-axis rotation
+- Bake rotation: Apply rotation permanently to geometry
+
+RESET FUNCTIONALITY:
+- Reset button per model
+- Restores: Original scale, position, rotation, geometry
+- Clears: All cuts, rotations, modifications
+- Useful for: Starting over without re-uploading
+
+PAGINATION SYSTEM:
+- One model displayed per page
+- Next/Previous navigation
+- Prevents browser slowdown with many models
+- Page indicator shows current position
+
+DEPENDENCIES:
+- External Libraries:
+  * Three.js r128 - 3D rendering, geometry processing, scene management
+  * Earcut 2.2.4 - Polygon triangulation for cut surface cap generation
+- Browser APIs:
+  * WebGL - 3D graphics rendering
+  * Canvas API - Screenshot generation
+  * File API - STL reading and export
+  * ArrayBuffer - Binary STL processing
+  * Blob & URL.createObjectURL - Downloads
+  * KeyboardEvent - Rotation controls
+- Project Files:
+  * Stage 1 output (optional) - Clean, deduplicated STL files
+
+INTEGRATION:
+- Receives data from: Stage 1 (or direct upload if user skips Stage 1)
+- Sends data to: Modified STL files + product screenshots
+- Workflow Position: Stage 2 of processing pipeline (after quality check/dedup)
+- Output: Production-ready STL files at correct scale with clean bases and product renders
+
+THREE.JS CONFIGURATION:
+- Renderer: WebGL with alpha (transparent background), antialias
+- Camera: Perspective, auto-positioned based on model bounds
+- Lighting:
+  * Ambient: 0x404040 (soft fill light)
+  * Directional: 0xffffff from (1, 1, 1) direction
+  * Hemisphere: 0xffffff sky, 0x444444 ground
+- Material: MeshPhongMaterial with vertex colors support
+- Controls: OrbitControls for mouse interaction
+- Grid Helper: Optional floor grid for reference
+- Axis Helper: Optional XYZ axis indicators
+
+DATA STRUCTURES:
+- processedModels: Map of {modelId: {originalGeometry, currentGeometry, scale, rotation, cut data, UI elements}}
+- Global state: Current page, total models, processing status, rotation mode
+
+OUTPUT FORMATS:
+- STL Export: Binary STL with random suffix (filename_ABC123.stl)
+- Screenshot: PNG 2048x2048 transparent background
+- Filename pattern: "[original_name]_[suffix].stl" and "[original_name]_[suffix].png"
+
+UI LAYOUT:
+- Sticky Header: Processing buttons (28mm, custom heights, batch operations)
+- Main Area: 3D viewer with model card (controls, measurements, rotation, cut options)
+- Sticky Footer: Pagination controls (Previous/Next, page counter)
+- Color Scheme: Dark theme (#1a1a1a background, #4CAF50 accents)
+
+CORRECTIONS & CLARIFICATIONS:
+- Initially thought: Cut feature might use simple plane clipping
+- Actually: Full geometry reconstruction with proper capping and triangulation
+- Why this matters: Produces manifold, printable STL files (no open edges)
+
+- Initially thought: Rotation might be render-only
+- Actually: Can be baked into geometry permanently
+- Why this matters: Exported STL reflects visual orientation
+
+- Initially thought: Reference man might be separate upload
+- Actually: Embedded as base64 STL data in HTML
+- Why this matters: No external dependencies, always available
+
+NOTES:
+- 28mm scale is tabletop gaming standard (6ft tall human = 28mm model)
+- Earcut library critical for robust cut surface triangulation
+- Normal fixing prevents lighting artifacts on cut surfaces
+- Floating part removal prevents accidental debris in exports
+- Random suffix prevents filename conflicts in batch operations
+- Transparent screenshot backgrounds for flexible use in product photos
+- OrbitControls must remain enabled for user interaction
+- Processing is async to prevent UI freezing
+- Toast notifications provide user feedback during operations
+- Reference man uses same scale calculation as models
+- Model cards use CSS grid for responsive layout
+- Loading progress indicator for batch operations
+
+USE CASE:
+Production pipeline for tabletop gaming miniatures. After Stage 1 filtering, users:
+1. Upload STL files (or batch from Stage 1)
+2. Scale to 28mm standard using real-world measurements
+3. Verify scale with reference man overlay
+4. Cut off existing bases for custom basing
+5. Rotate to optimal angle for photography/printing
+6. Export production STL + product photo screenshot
+7. Use screenshots for marketplace listings
+8. Use STL files for 3D printing
+
+This enables rapid processing of entire miniature collections with consistent scaling
+and professional product photography.
+
+WORKFLOW INTEGRATION:
+Input: Clean STL files from Stage 1 (or raw files)
+Process: Scale to gaming standard, remove bases, optimize orientation, render
+Output: Print-ready STL + product photo PNG
+Next Step: 3D printing and/or marketplace listing
+
+KEYBOARD SHORTCUTS:
+- Arrow Keys: X/Y axis rotation
+- A/D: Z-axis rotation
+- W/S: Alternative X-axis rotation
+- Q/E: Alternative Z-axis rotation
+- All rotations: 15° increments per keypress
+
+FUTURE IMPROVEMENTS:
+- Batch rotation application
+- Custom rotation increment settings
+- Multiple reference figure options (different heights)
+- Auto-rotation to "best angle" for photography
+- Comparison view (before/after cut)
+- Advanced cut shapes (angled, curved)
+- Measurement overlay on screenshot
+- Direct integration with Stage 1 (seamless pipeline)
+- Save/load processing presets
+===

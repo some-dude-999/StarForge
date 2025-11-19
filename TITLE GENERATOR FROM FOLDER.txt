@@ -1,0 +1,216 @@
+=== TITLE GENERATOR FROM FOLDER.txt ===
+PROJECT: SFK (Starforge Forge Kit)
+COMPONENT: Image SEO Title Generator - Collection Folders
+CREATED: 2025-11-19
+LAST UPDATED: 2025-11-19 - Initial documentation created
+
+DATA SOURCES:
+- User Input: Image files (PNG) organized in folder collections via drag-and-drop or directory picker
+- User Input: OpenAI API key for GPT-4 Vision API
+- User Input: System prompt (instructions for AI)
+- User Input: User prompt (specific title generation requirements)
+- External API: OpenAI Chat Completions API (https://api.openai.com/v1/chat/completions)
+- File System: Directory structure for collection organization
+
+FUNCTIONALITY:
+- Main Purpose: Bulk generate SEO-optimized product titles for images using AI vision analysis
+- Key Functions:
+  * File & Directory Handling:
+    - handleFolderDrop(items) - Process drag-and-drop folder uploads
+    - scanDirectory(dirEntry, collections, path) - Recursively scan directories for PNG files
+    - readPNGFiles(dirEntry) - Extract PNG files from directory
+    - handleFolderSelect(files) - Process folder selection from file picker
+    - processFilesFromCollections(collections) - Organize files by collection folder
+
+  * Title Generation:
+    - generateSEOTitle(apiKey, fileName, base64Image, systemPrompt, userPrompt) - Call OpenAI API with image
+    - fileToBase64(file) - Convert image to base64 for API submission
+    - Image resizing: Automatically resize to 512px (longest side) before API call (~90% cost reduction)
+    - Unlimited retry logic: Keeps retrying until successful (no "sorry" responses)
+
+  * Title Processing:
+    - removeCollectionWordsFromTitle(title, collectionName) - Strip folder name words from generated titles
+    - titleContainsInvalidWords(title) - Check for blacklisted words ("sorry", "apologize", etc.)
+    - getModifiedTitle(originalTitle) - Apply user modifications
+    - updateAllTitles() - Recalculate all modified titles
+
+  * UI & Control:
+    - processFiles() - Start batch processing
+    - continueProcessing() - Resume from pause
+    - Pause/Resume functionality during batch operations
+    - Stop processing option
+    - updateCollectionsDisplay(collections) - Show organized file structure
+    - copyToClipboard(text, element) - Copy title to clipboard on click
+    - naturalSort(a, b) - Smart filename sorting (handles numbers correctly)
+
+  * Progress & Status:
+    - Real-time progress tracking (X of Y processed)
+    - Status messages (success, error, warning, paused)
+    - Row highlighting for modified/unmodified titles
+    - Image preview thumbnails in results table
+
+  * Export:
+    - Copy individual titles to clipboard (click on title cell)
+    - CSV-style table output for manual export
+
+API CONFIGURATION:
+- Endpoint: https://api.openai.com/v1/chat/completions
+- Model: gpt-4o-mini (cost-optimized vision model)
+- Max Tokens: 300
+- Temperature: 0.7 (balanced creativity/consistency)
+- Image Format: Base64-encoded resized PNG (512px max)
+- Authentication: Bearer token (user's OpenAI API key)
+
+API KEY VALIDATION:
+- Must start with "sk-"
+- Length check (prevent obviously wrong keys)
+- ASCII-only characters (no special Unicode)
+- Auto-cleaning on paste/blur (trim whitespace)
+- Clear error messages for common mistakes
+
+OPTIMIZATION FEATURES:
+- Image Resizing: Longest side = 512px, preserves aspect ratio
+  * Reduces API costs by ~90%
+  * Maintains sufficient detail for vision analysis
+  * Uses canvas downsampling for quality
+- Unlimited Auto-Retry:
+  * Keeps retrying until valid title received
+  * Filters out "sorry" responses
+  * Prevents wasted API calls on failures
+- Batch Processing with Pause:
+  * Process large collections without blocking UI
+  * Pause/resume for interruptions
+  * Stop option to cancel
+
+PROMPT SYSTEM:
+- System Prompt: Instructions for AI behavior/style
+  * Default: Professional SEO optimization guidelines
+  * Customizable per session
+- User Prompt: Specific requirements per batch
+  * Default: "Generate a compelling, SEO-friendly title..."
+  * Can be modified for different title styles
+  * Synced across system/user fields
+
+FOLDER COLLECTION SYSTEM:
+- Organizes images by parent folder name
+- Example structure:
+  * "Dragons" folder → Dragon collection with 15 images
+  * "Knights" folder → Knights collection with 23 images
+- Collection name automatically removed from generated titles (prevents redundancy)
+- Natural sorting within collections (Dragon_1, Dragon_2, Dragon_10 sorted correctly)
+
+INVALID WORD FILTERING:
+- Blocks titles containing:
+  * "sorry" (API failure indicator)
+  * "apologize" (API failure indicator)
+  * "I cannot" (API refusal)
+  * "I can't" (API refusal)
+- Auto-retries if invalid words detected
+- Prevents manual cleanup of failed generations
+
+DEPENDENCIES:
+- External APIs:
+  * OpenAI Chat Completions API (gpt-4o-mini with vision)
+- Browser APIs:
+  * File System Access API - Directory reading
+  * Canvas API - Image resizing/optimization
+  * FileReader API - File reading and base64 encoding
+  * Clipboard API - Copy to clipboard functionality
+  * Drag and Drop API - Folder uploads
+- Project Files: None (standalone tool)
+
+INTEGRATION:
+- Receives data from: Local file system (user's organized image folders)
+- Sends data to: OpenAI API for title generation
+- Output: Table of SEO titles (copy-paste for marketplace listings)
+- Workflow Position: Post-processing after Stage 2 (uses rendered product screenshots)
+
+DATA STRUCTURES:
+- collections: {collectionName: [file objects]}
+- allFiles: [{file, collectionName, generatedTitle, modifiedTitle, status}]
+- State: processing/paused/stopped, current index, total files
+
+OUTPUT FORMAT:
+- Table display: Collection | Filename | Preview | Generated Title | Modified Title
+- Click title to copy to clipboard
+- Modified titles highlighted differently
+- Preview images clickable for full-size view
+
+UI COMPONENTS:
+- Drop Zone: Folder drag-and-drop area
+- API Key Input: OpenAI key entry (validated and cleaned)
+- Prompt Editors: System and user prompt customization
+- Collections List: Shows organized folder structure before processing
+- Action Buttons: Process, Pause, Resume, Stop, Clear All
+- Results Table: Sortable columns, click-to-copy titles, image previews
+- Status Messages: Color-coded feedback (success/error/warning/paused)
+- Progress Indicator: "Processing X of Y" during batch operations
+
+CORRECTIONS & CLARIFICATIONS:
+- Initially thought: Might use local AI model
+- Actually: Uses OpenAI API (requires API key and internet)
+- Why this matters: Costs per API call, but higher quality results
+
+- Initially thought: Processes all image types
+- Actually: Optimized for PNG files specifically
+- Why this matters: Matches Stage 2 output format (transparent PNGs)
+
+- Initially thought: Manual title editing in UI
+- Actually: AI-generated with optional "modified" tracking
+- Why this matters: Workflow is generate → copy → paste elsewhere
+
+NOTES:
+- Requires valid OpenAI API key (user must have account)
+- API costs apply per image processed (~$0.01-0.02 per image with optimization)
+- Image resizing is automatic and transparent to user
+- Collections feature assumes organized folder structure
+- Natural sorting handles numeric sequences correctly (Dragon_1, Dragon_2, Dragon_10)
+- Pause functionality preserves progress (doesn't restart)
+- Stop functionality requires full restart
+- Title modification tracking shows which titles user changed
+- Click anywhere on title cell to copy (not just specific button)
+- Preview images open in modal on click
+- No local storage - session is temporary
+
+USE CASE:
+After processing 3D models through Stage 1 and Stage 2, users have product screenshots.
+This tool:
+1. Accepts folders of screenshot images (organized by product type/collection)
+2. Analyzes each image using AI vision
+3. Generates SEO-optimized titles for marketplace listings (Etsy, eBay, etc.)
+4. Allows bulk copy-paste for rapid listing creation
+5. Saves hours of manual title writing
+
+Example workflow:
+- Stage 2 output: 100 miniature screenshots in "Dragons" folder
+- Drop folder into Title Generator
+- AI analyzes each miniature and generates compelling titles
+- Copy titles and paste into marketplace listings
+- Professional SEO optimization without manual effort
+
+WORKFLOW INTEGRATION:
+Input: PNG screenshots from Stage 2 (or any product photos)
+Process: AI vision analysis → SEO title generation → collection organization
+Output: Table of copyable titles for marketplace listings
+Benefits: Consistency, SEO optimization, time savings
+
+ERROR HANDLING:
+- API key validation with helpful error messages
+- Invalid response filtering and auto-retry
+- Network error handling with status display
+- File reading error handling
+- Clipboard copy failure fallback
+- Progress preservation on pause
+
+FUTURE IMPROVEMENTS:
+- Export to CSV file
+- Bulk title editing options
+- Title templates/patterns
+- Integration with marketplace APIs (auto-upload)
+- Cost tracking per session
+- Save/load session state
+- Multiple AI model options (GPT-4, Claude, etc.)
+- Batch prompt variations (A/B testing titles)
+- Character count limits (per marketplace requirements)
+- Keyword suggestion feature
+===

@@ -1,0 +1,142 @@
+=== Stage 1 STL Duplicate & Quality Checker.txt ===
+PROJECT: SFK (Starforge Forge Kit)
+COMPONENT: 3D Model Inspector - Quality Check & Duplicate Finder
+CREATED: 2025-11-19
+LAST UPDATED: 2025-11-19 - Initial documentation created
+
+DATA SOURCES:
+- User Input: STL files (binary or ASCII format) via drag-and-drop or file picker
+- File System: STL model data (geometry, vertices, faces)
+- Canvas: 2D snapshots of 3D models for visual comparison
+- External Library: Three.js r128 (from cdnjs.cloudflare.com)
+
+FUNCTIONALITY:
+- Main Purpose: Upload and analyze multiple STL files to detect duplicates and perform quality inspection
+- Key Functions:
+  * parseSTL(buffer) - Detects STL format (binary vs ASCII) and routes to appropriate parser
+  * parseBinarySTL(buffer) - Parses binary STL files, extracts geometry data
+  * parseASCIISTL(text) - Parses ASCII STL files, extracts geometry data
+  * renderModelToCanvas(geometry) - Renders 3D model to canvas using Three.js for comparison
+  * compareImages(dataURL1, dataURL2, threshold) - Pixel-by-pixel comparison with 5% default threshold
+  * handleFiles(files) - Main file processing pipeline, loads and analyzes all uploaded models
+  * getNormalizedName(filename) - Normalizes filenames for duplicate detection (removes extensions, numbers)
+  * markAsDuplicate(duplicateFilename, originalFilename) - Marks file as duplicate of another
+  * unmarkDuplicate(duplicateFilename) - Removes duplicate marking
+  * toggleMarkDuplicate(model) - UI handler for marking/unmarking duplicates
+  * autoMarkRemainingDuplicates() - Automatically marks all remaining duplicates
+  * openInspectionView(index) - Opens full-screen hand inspection mode for quality checking
+  * markAsBadFile() - Flags file as having quality issues during inspection
+  * unmarkBadFile(filename) - Removes bad file marking
+  * addModelToTable(model) - Adds model entry to main data table
+  * addToMarkedDuplicatesTable() - Adds entry to marked duplicates table
+  * addToBadFilesTable(model) - Adds entry to bad files/quality issues table
+  * recheckDuplicates() - Re-runs duplicate detection algorithm
+  * exportDeletionCSV() - Exports list of files marked for deletion
+  * downloadScreenshot(model) - Downloads thumbnail of specific model
+  * downloadAllScreenshots() - Batch downloads all model thumbnails
+  * updateStats() - Updates counters (total files, duplicates, bad files)
+  * clearAll() - Resets all application state and tables
+- Event Handlers:
+  * Upload zone: drag-and-drop and file selection
+  * Main table: Click to inspect, checkbox to mark duplicates
+  * Inspection view: Hand inspection with bad file marking
+  * Auto-mark button: Automatically marks all duplicates
+  * Recheck button: Re-analyzes files for duplicates
+  * Export CSV button: Generates deletion list
+
+DUPLICATE DETECTION ALGORITHM:
+1. Normalize filenames (remove extensions, version numbers)
+2. Render each model to canvas at standardized angle/lighting
+3. Compare canvas snapshots pixel-by-pixel
+4. If similarity > 95% (threshold), mark as potential duplicate
+5. Use normalized names to determine "original" vs "duplicate"
+6. User can manually override auto-detection
+
+QUALITY INSPECTION WORKFLOW:
+1. User clicks on model in main table
+2. Opens full-screen inspection view with 3D viewer
+3. User rotates/examines model using Three.js controls
+4. Can mark as "Bad File" if quality issues found
+5. Marked files added to Bad Files table
+6. Close inspection and continue to next model
+
+VIEW MODES:
+- Main View: Upload zone, data table, statistics, marked duplicates table, bad files table
+- Inspection View: Full-screen 3D model viewer with rotation controls and quality marking
+
+DEPENDENCIES:
+- External Libraries:
+  * Three.js r128 - 3D rendering engine, camera controls, lighting, geometry processing
+- Browser APIs:
+  * Canvas API - 2D snapshot generation for comparison
+  * File API - STL file reading
+  * WebGL - 3D graphics rendering
+  * ArrayBuffer - Binary STL parsing
+  * Blob & URL.createObjectURL - File downloads
+- Project Files: None (standalone tool)
+
+INTEGRATION:
+- Receives data from: User file uploads
+- Sends data to: CSV export for deletion scripts, screenshot downloads
+- Triggers: User interaction (upload, inspection, marking)
+- Workflow Position: Stage 1 of processing pipeline (before Stage 2 resize/render)
+- Output: Filtered set of unique, quality-checked STL files
+
+THREE.JS CONFIGURATION:
+- Renderer: WebGL with alpha, antialiasing enabled
+- Camera: Perspective camera with auto-fitted position based on model bounds
+- Lighting: Ambient light (0x404040) + Directional light (0xffffff) from top-right
+- Controls: OrbitControls for mouse-based rotation/zoom
+- Material: MeshPhongMaterial with flat shading, double-sided rendering
+- Background: Blue gradient (linear-gradient(135deg, #1e3c72 0%, #2a5298 100%))
+
+DATA STRUCTURES:
+- loadedModels: Array of {filename, geometry, dataURL, isDuplicate, duplicateOf, normalizedName, fileSize, isBadFile}
+- Global state: Statistics counters, view state, current inspection index
+
+OUTPUT FORMATS:
+- CSV Export: Filename list of duplicates and bad files (for batch deletion)
+- Screenshots: PNG images of each model's canvas snapshot
+- Marked Tables: Interactive tables showing duplicates and quality issues
+
+CORRECTIONS & CLARIFICATIONS:
+- Initially thought: Might use server-side duplicate detection
+- Actually: Fully client-side using canvas pixel comparison
+- Why this matters: No upload required, instant results, works offline
+
+- Initially thought: Might use hash-based duplicate detection
+- Actually: Visual comparison via rendered snapshots
+- Why this matters: Catches visually identical models even if files differ slightly
+
+NOTES:
+- Supports both binary and ASCII STL formats
+- Duplicate detection is visual, not file-hash based (intentional for catching re-exports)
+- Normalized filename matching helps identify version variations
+- 5% threshold allows for minor rendering differences
+- Hand inspection view critical for quality control before manufacturing
+- Export CSV enables scripted file cleanup
+- Auto-mark feature speeds up large batch processing
+- Three.js r128 chosen for stability (not latest version)
+- OrbitControls must be enabled for inspection view
+- Models auto-centered and scaled to fit viewport
+
+USE CASE:
+Quality control for 3D printing operations. Before processing models through Stage 2
+(scaling and rendering), users need to eliminate duplicates to avoid wasted processing
+time and identify quality issues (broken geometry, missing faces, etc.) that would
+cause print failures. Critical for batch operations on large model libraries.
+
+WORKFLOW INTEGRATION:
+Input: Raw STL files from designers/downloads
+Process: Detect duplicates, flag quality issues
+Output: Clean, unique set of STL files
+Next Step: Stage 2 (resize, cut bottom, render for product photos)
+
+FUTURE IMPROVEMENTS:
+- Adjustable similarity threshold
+- Batch download of non-duplicate files
+- Automatic geometry repair suggestions
+- More detailed quality metrics (triangle count, manifold check, volume calculation)
+- Save/load session state
+- Integration with Stage 2 for seamless pipeline
+===

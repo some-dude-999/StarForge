@@ -1,0 +1,107 @@
+=== AUTO PRODUCT PHOTO COVER.txt ===
+PROJECT: SFK (Starforge Forge Kit)
+COMPONENT: Starforge Image Processor - Product Photo Cover Generator
+CREATED: 2025-11-19
+LAST UPDATED: 2025-11-19 - Initial documentation created
+
+DATA SOURCES:
+- User Input: Image files (JPG/PNG) via drag-and-drop or file picker
+- User Input: Top text field (default: "STARFORGE")
+- User Input: Bottom text field (default: "Unlock All STARFORGE STL Files & Sell 3D Prints for Only $10")
+- Font CDN: Google Fonts - Orbitron (700, 900 weights) and Inter (400, 600 weights)
+- External Library: JSZip 3.10.1 (from cdnjs.cloudflare.com)
+
+FUNCTIONALITY:
+- Main Purpose: Batch process product images by adding branded cover/frame with customizable text
+- Key Functions:
+  * handleFiles(files) - Validates and queues image files for processing
+  * processImage(file) - Loads individual image file and triggers processing
+  * createProcessedImage(img, filename) - Core canvas rendering function that:
+    - Creates 1080x1080 canvas with dark gray background (#2c2c2c)
+    - Draws top branding box (180px height) with horizontal line and bottom border
+    - Centers and scales original image in 740x740 rounded box with orange border
+    - Renders "STARFORGE" text (or custom) using Orbitron font with background box
+    - Adds bottom promotional text using Inter font
+  * addToGallery(dataUrl, originalFilename) - Creates preview card in gallery
+  * downloadImage(dataUrl, originalFilename) - Triggers individual JPEG download
+  * loadFonts() - Preloads Orbitron font to prevent rendering issues
+- Event Handlers:
+  * Drop zone: drag-and-drop file upload
+  * "Process All Images" button: batch processes all queued images
+  * "Download All" button: downloads all processed images individually with 2-second delay
+  * "Download as ZIP" button: packages all processed images into single ZIP archive
+  * "Clear All" button: resets application state
+  * Individual "Download Image" buttons in gallery
+
+OUTPUT FORMAT:
+- Individual downloads: "[cleaned_name] StarForge Kits 3D Print STL File.jpg"
+- ZIP download: "starforge_images_[timestamp].zip"
+- Filename cleaning: Apostrophes and periods replaced with underscores
+- Image format: JPEG at 95% quality
+- Canvas size: 1080x1080 pixels (Instagram/social media optimized)
+
+DEPENDENCIES:
+- External Libraries:
+  * JSZip 3.10.1 - ZIP file generation
+  * Google Fonts API - Orbitron and Inter fonts
+- Browser APIs:
+  * Canvas API (2D context with willReadFrequently flag)
+  * File API (FileReader for image loading)
+  * Drag and Drop API
+  * FontFace API for font preloading
+- Project Files: None (standalone tool)
+
+INTEGRATION:
+- Receives data from: User file uploads (browser File API)
+- Sends data to: User downloads (browser download mechanism)
+- Triggers: User interaction (drag-drop, button clicks)
+- Standalone: No integration with other SFK tools
+
+DESIGN SPECIFICATIONS:
+- Canvas: 1080x1080px (social media standard)
+- Top Box: 180px height, #1a1a1a background
+- Image Box: 740x740px with 30px border radius, 10px orange border (#d97706)
+- Top Text: Orbitron Bold 96px, #f0ead6 color, centered with background box
+- Bottom Text: Inter 35px, #c4bfac color, 20px margin from bottom
+- Color Scheme: Dark theme (#2a2a2a body, #333 containers, #f0ead6 accents)
+
+PERFORMANCE CONSIDERATIONS:
+- Font preloading prevents text rendering issues
+- willReadFrequently flag optimizes canvas pixel reading
+- 2-second delay between downloads prevents browser blocking
+- Async/await pattern for sequential image processing
+- Promise-based image loading
+
+CORRECTIONS & CLARIFICATIONS:
+- Initially thought: This might use backend processing
+- Actually: Fully client-side using Canvas API
+- Why this matters: No server required, works offline, fast processing
+
+- Initially thought: Images might be PNG format
+- Actually: All outputs are JPEG at 95% quality
+- Why this matters: Smaller file sizes for social media sharing
+
+NOTES:
+- Font loading has fallback mechanism for reliability
+- Filename cleaning prevents filesystem issues
+- Image scaling uses "cover" behavior (fills entire box, crops if needed)
+- Gallery provides instant preview of processed images
+- ZIP functionality crucial for batch workflows
+- No image quality or size validation (assumes user provides appropriate content)
+- Pending files list shows queue before processing
+- Processing indicator shows active status during batch operations
+
+USE CASE:
+Primary use case is e-commerce product photography for Starforge's 3D printing business.
+Allows quick branding of multiple product photos for social media, marketplace listings,
+and promotional materials. The 1080x1080 format is optimized for Instagram and other
+social platforms.
+
+FUTURE IMPROVEMENTS:
+- Add configurable canvas size options
+- Allow custom color schemes
+- Support for logo uploads
+- Text position customization
+- Preview before processing
+- Undo functionality
+===
